@@ -1,0 +1,7 @@
+Compilation: gcc -o mrhs mrhs.hillc.c mrhs.hillc.tester.c -lm -D_VERBOSITY=2
+
+mrhs.hillc.c    - hill climbing style solver
+mrhs.solver.h   - header to core solver
+mrhs.tester.c   - testing program
+
+mrhs.txt        - demo MRHS equation system {factorisation->SAT->MRHS}
