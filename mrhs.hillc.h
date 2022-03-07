@@ -9,8 +9,9 @@
 #include <stdint.h>
 
 #include "mrhs.bm.h"
+#include "mrhs.h"
 
 
-long long int solve(_bbm *pbbm, _bbm *prhs[], int maxr, long long int* pCount, long long int* pRestarts);
+long long int solve(MRHS_system system, int maxr, long long int* pCount, long long int* pRestarts);
 
 #endif //_SOLVER_H

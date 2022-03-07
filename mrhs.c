@@ -16,8 +16,11 @@ MRHS_system create_mrhs_fixed(int nrows, int nblocks, int blocksize, int rhscoun
 {
 	int blocksizes[nblocks];
 	int rhscounts[nblocks];
-	memset(blocksizes, blocksize, nblocks * sizeof(blocksizes[0]));
-	memset( rhscounts,  rhscount, nblocks * sizeof( rhscounts[0]));
+	for (int block = 0; block < nblocks; block++)
+	{
+		blocksizes[block] = blocksize;
+		rhscounts[block]  = rhscount;
+	}
 	
 	return create_mrhs_variable(nrows, nblocks, blocksizes, rhscounts);
 }
@@ -39,7 +42,7 @@ MRHS_system create_mrhs_variable(int nrows, int nblocks, int blocksizes[], int r
 	system.nblocks = nblocks;
 	system.pM      = calloc(nblocks, sizeof(_bm));
 	system.pS      = calloc(nblocks, sizeof(_bm));
-	for (int block = 0; block < psystem->nblocks; block++)
+	for (int block = 0; block < system.nblocks; block++)
 	{
 		system.pM[block] = create_bm(nrows, blocksizes[block]);
 		system.pS[block] = create_bm(rhscounts[block], blocksizes[block]);
@@ -73,8 +76,8 @@ void fill_mrhs_random(MRHS_system *psystem)
 {
 	for (int block = 0; block < psystem->nblocks; block++)
 	{
-		random_bm(psystem->pM);
-		random_unique_bm(psystem->pS);
+		random_bm(&psystem->pM[block]);
+		random_unique_bm(&psystem->pS[block]);
 	}	
 }
 
@@ -84,8 +87,8 @@ void fill_mrhs_random_sparse(MRHS_system *psystem)
 {
 	for (int block = 0; block < psystem->nblocks; block++)
 	{
-		random_sparse_cols_bm(psystem->pM);
-		random_unique_bm(psystem->pS);
+		random_sparse_cols_bm(&psystem->pM[block]);
+		random_unique_bm(&psystem->pS[block]);
 	}	
 }
 
@@ -94,11 +97,11 @@ void fill_mrhs_random_sparse(MRHS_system *psystem)
 void fill_mrhs_random_sparse_extra(MRHS_system *psystem, int density)
 {
 	fill_mrhs_random_sparse(psystem);
-    for (i = 0; i < density; i++)
+	for (int i = 0; i < density; i++)
     {
-		block = rand() % psystem->nblocks;
-		row   = rand() % psystem->pM[block].nrows;
-		col   = rand() % psystem->pM[block].ncols;
+		int block = rand() % psystem->nblocks;
+		int row   = rand() % psystem->pM[block].nrows;
+		int col   = rand() % psystem->pM[block].ncols;
 		psystem->pM[block].rows[row] |= (ONE << col);     	   
 	}	
 }
@@ -119,10 +122,10 @@ MRHS_system read_mrhs_variable(FILE *f)
 
 	k = (int*)calloc(m, sizeof(int));
 	l = (int*)calloc(m, sizeof(int));
-	for (i = 0; i < m; i++)
+	for (block = 0; block < m; block++)
 	{
-	 fscanf(f, "%i", &l[i]);
-	 fscanf(f, "%i", &k[i]);
+	 fscanf(f, "%i", &l[block]);
+	 fscanf(f, "%i", &k[block]);
 	}
 
 	//prepare system
@@ -194,7 +197,7 @@ int write_mrhs_variable(FILE *f, MRHS_system system)
 	}   
 
 	// print RHS part
-	for (block = 0; block < nblocks; block++)
+	for (block = 0; block < system.nblocks; block++)
 	{
 		fprintf(f, "\n");
 		for (row = 0; row < maxrhs; row++)
@@ -240,7 +243,7 @@ int print_mrhs(FILE *f, MRHS_system system)
 	//separator
 	for (block = 0; block < system.nblocks; block++)
 	{
-		for (bit = 0; bit < system.pM[block].ncols; bit++)
+		for (int bit = 0; bit < system.pM[block].ncols; bit++)
 		{
 			fprintf(f, "-");
 		}
@@ -251,10 +254,10 @@ int print_mrhs(FILE *f, MRHS_system system)
 	// print RHS part
 	for (row = 0; row < maxrhs; row++)
 	{     
-		for (block = 0; block < nblocks; block++)
+		for (block = 0; block < system.nblocks; block++)
 		{
 			// no more rhs in given S
-			if (i >= system.pS[block].nrows)
+			if (row >= system.pS[block].nrows)
 			{
 				fprintf(f, "%*c", system.pS[block].ncols+1, ' ');
 				continue;

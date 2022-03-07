@@ -5,6 +5,7 @@
 #define _MRHS_BM_H
 
 #include <stdint.h>
+#include <stdio.h>
 
 /**********************************************************************
  * Data structure
@@ -19,8 +20,8 @@
 typedef uint64_t _block;
 
 #define MAXBLOCKSIZE    64
-#define ONE  ((_block)1)
-#define ZERO ((_block)0)
+#define ONE  ((_block)1llu)
+#define ZERO ((_block)0llu)
 
 
 //mask for last block

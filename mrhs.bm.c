@@ -2,6 +2,7 @@
 // Block  Matrix
 
 #include <stdlib.h>
+#include <stdio.h>
 #include "mrhs.bm.h"
 
 ////////////////////////////////////////////////////////////////////////
@@ -55,9 +56,9 @@ void random_bm(_bm *pbm)
 	int row;
 	_block mask = BLOCK_MASK(pbm->ncols);
 
-	for (row = 0; row < pbbm->nrows; row++)
+	for (row = 0; row < pbm->nrows; row++)
 	{     
-		pbbm->rows[row] = random_block() & mask;
+		pbm->rows[row] = random_block() & mask;
 	}
 }
 
@@ -98,7 +99,7 @@ void random_unique_bm(_bm *pbm)
 void random_sparse_cols_bm(_bm *pbm)
 {
 	int row, col;
-	_block mask = BLOCK_MASK(pbm->ncols);
+	_block mask;
      
 	for (col = 0; col < pbm->ncols; col++)
 	{
@@ -122,16 +123,16 @@ void random_sparse_cols_bm(_bm *pbm)
 void print_block(FILE* f, _bm bm, int row)
 {
 	_block data = bm.rows[row]; 
-	for (int bit = 0; bit < system.pM[block].ncols; bit++, data>>=1)
+	for (int bit = 0; bit < bm.ncols; bit++, data>>=1)
 	{
-		fprintf(f, "%llu", data&ONE);
+		fprintf(f, "%lu", data&ONE);
 	}
 }
 int read_block(FILE* f, _bm bm, int row)
 {
-	int c = 0;
+	int c = 0, read;
 	_block data = ZERO;
-	for (bit = 0; bit < bm.ncols; bit++)
+	for (int bit = 0; bit < bm.ncols; bit++)
 	{
 		c += fscanf(f, "%1i", &read); 
 		data ^= (((_block)read)<<bit); 

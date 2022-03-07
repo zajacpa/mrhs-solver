@@ -31,7 +31,7 @@
 //4 -> include statistics
 
 #ifndef _VERBOSITY
- #define _VERBOSITY 2
+ #define _VERBOSITY 4
 #endif
 
 #define MAXS 30
@@ -66,275 +66,7 @@ void init_stats(_experiment *setup);
 // Fills in experimental setup from command line arguments
 //   Additionally: returns file name conatining eq. system, CMD LINE -f
 //                 returns flag, whether run full experiment or just estimate, CMD LINE -e   
-int parse_cmd(int argc, char *argv[], _experiment *setup, char **pfn);
-
-
-////////////////////////////////////////////////////////////////////////////////
-// Utility functions
-
-///fill in with random values
-void random_bbm(_bbm *pbbm)
-{
-     int i, block;
-     _block mask;
-     
-     for (block = 0; block < pbbm->nblocks; block++)
-     {
-       mask = (1u << pbbm->blocksizes[block]) - 1;
-       for (i = 0; i < pbbm->nrows; i++)
-       {     
-           pbbm->rows[i][block] = rand() & mask;
-       }
-     }   
-}
-
-///fill in with random values, density = extra ones to place
-void random_sparse_bbm(_bbm *pbbm, int density)
-{
-     int i, block, blocksize, row, col;
-     _block mask;
-     
-     for (block = 0; block < pbbm->nblocks; block++)
-     {
-       //add random variables active in each column of a block
-       blocksize = pbbm->blocksizes[block];
-       mask = ONE;
-       
-       for (i = 0; i < blocksize; i++)
-       {   
-       	   row = rand() % pbbm->nrows;
-       	   if (pbbm->rows[row][block] != ZERO)
-       	   {
-       	   	   //already set to another one
-       	   	   i--; continue;
-       	   }
-       	   //set active variable
-           pbbm->rows[row][block] = mask;
-           mask <<= 1;
-       } 
-     }   
-     for (i = 0; i < density; i++)
-     {
-       	   row = rand() % pbbm->nrows;
-     	   block = rand() % pbbm->nblocks;
-     	   col = rand() % pbbm->blocksizes[block];
-           pbbm->rows[row][block] |= (ONE << col);     	   
-     }
-     
-}
-
-///print block matrix
-void print(FILE* f, _bbm *pbbm, int pivots)
-{
-     int i, j, block;
-     _block data;
-     
-     for (i = 0; i < pbbm->nrows; i++)
-     {     
-       for (block = 0; block < pbbm->nblocks; block++)
-       {
-          data = pbbm->rows[i][block]; 
-          for (j = 0; j < pbbm->blocksizes[block]; j++, data>>=1)
-          {
-              fprintf(f, "%li", data&1);
-          }
-          fprintf(f, " ");
-       }
-       fprintf(f, "\n");
-     }   
-    
-     if (!pivots) 
-        return;
-
-     for (i = 0; i < pbbm->nblocks; i++)
-          printf("%*i%c", (int)pbbm->blocksizes[i], pbbm->pivots[i], 
-                         i < pbbm->nblocks - 1 ? ' ' : '\n');
-}
-
-///print block matrix
-void print_rhs(FILE* f, _bbm *prhs[], int nblocks)
-{
-     int i, j, block, maxrows;
-     _block data;
-     
-     maxrows = prhs[0]->nrows;
-     for (j = 1; j < nblocks; j++)
-        if (prhs[j]->nrows > maxrows)
-            maxrows = prhs[j]->nrows;
-     
-     for (i = 0; i < maxrows; i++)
-     {     
-       for (block = 0; block < nblocks; block++)
-       {
-          if (i >= prhs[block]->nrows)
-          {
-              fprintf(f, "%*c", (int)prhs[block]->blocksizes[0]+1, ' ');
-              continue;
-          }   
-          
-          data = prhs[block]->rows[i][0]; 
-          for (j = 0; j < prhs[block]->blocksizes[0]; j++, data>>=1)
-          {
-              fprintf(f, "%li", data&1);
-          }
-          fprintf(f, " ");
-       }
-       fprintf(f, "\n");
-     }   
-}
-
-///read system in sage format, first M by lines, then solutions by sets Si
-int read_system_sage(FILE *f, _bbm *pbbm, _bbm *prhs[])
-{
-     int i, bit, block, read;
-     
-     //TODO: check correctness
-     
-     //list of rows of M
-     for (i = 0; i < pbbm->nrows; i++)
-     {   
-         fscanf(f, "["); 
-         for (block = 0; block < pbbm->nblocks; block++)
-         {
-             for (bit = 0; bit < pbbm->blocksizes[block]; bit++)
-             {
-                 fscanf(f, "%i", &read); 
-                 pbbm->rows[i][block] ^= (((_block)read)<<bit);     //fixed block type
-             }
-         }   
-         fscanf(f, "]\n"); 
-     }
-     
-     //list of solutions S
-     for (block = 0; block < pbbm->nblocks; block++)
-     {
-          for (i = 0; i < prhs[block]->nrows; i++)
-          {     
-             fscanf(f, "["); 
-             for (bit = 0; bit < prhs[block]->blocksizes[0]; bit++)
-             {
-                 fscanf(f, "%i", &read); 
-                 prhs[block]->rows[i][0] ^= (((_block)read)<<bit);        //fixed block type           
-             }                
-             fscanf(f, "]\n"); 
-          }
-     }   
-     
-     return 1;
-}
-
-///read system in sage format, first metadata, then M by lines, then solutions by sets Si
-typedef struct {_bbm *pbbm; _bbm **prhs; } MRHS_system;
-
-MRHS_system read_system_sage_new(FILE *f)
-{
-     MRHS_system system;
-     char c;
-     int i, bit, block, read, n, m, *k, suml, sumk;
-     int *l;
-     
-     fscanf(f, "%i", &n);
-     fscanf(f, "%i", &m);
-    
-     k = (int*)calloc(m, sizeof(int));
-     l = (int*)calloc(m, sizeof(int));
-     suml = 0; sumk = 0;
-     for (i = 0; i < m; i++)
-     {
-         fscanf(f, "%i", &l[i]);
-         fscanf(f, "%i", &k[i]);
-         suml+=l[i];
-         sumk+=k[i];
-     }
-
-     if (gp_experiment != NULL)
-     {
-        gp_experiment->n = n;
-        gp_experiment->m = m;
-        gp_experiment->l = suml/m;
-        gp_experiment->k = sumk/m;
-     }
-
-     system.pbbm = create_bbm_new(n, m, l);
-     system.prhs = (_bbm**) calloc(m, sizeof(_bbm*));
-     //list of rows of M
-     for (i = 0; i < system.pbbm->nrows; i++)
-     {   
-         while (fscanf(f, "%c", &c) && c != '[')
-             ; 
-         for (block = 0; block < system.pbbm->nblocks; block++)
-         {
-             for (bit = 0; bit < system.pbbm->blocksizes[block]; bit++)
-             {
-                 fscanf(f, "%1i", &read); 
-                 system.pbbm->rows[i][block] ^= (((_block)read)<<bit);  //fixed block type
-             }
-         }   
-         fscanf(f, "]\n"); 
-     }
-     
-     //list of solutions S
-     for (block = 0; block < system.pbbm->nblocks; block++)
-     {
-          system.prhs[block] = create_bbm(k[block], 1, l[block]);
-          for (i = 0; i < system.prhs[block]->nrows; i++)
-          {     
-             while (fscanf(f, "%c", &c) && c != '[')
-                ; 
-             for (bit = 0; bit < system.prhs[block]->blocksizes[0]; bit++)
-             {
-                 fscanf(f, "%1i", &read); 
-                 system.prhs[block]->rows[i][0] ^= (((_block)read)<<bit);     //fixed block type              
-             }                
-             fscanf(f, "]\n"); 
-          }
-     }   
-     
-     free(l);
-     free(k);
-     
-     return system;
-}
-
-///print raw block data in hex
-void print_raw_blocks(FILE* f, _block *blocks, int count, int bl)
-{
-     int i, j;
-       for (i = 0; i < count; i++)
-       {
-       	  for (j = 0; j < bl; j++)
-			fprintf(f, "%0lx", (blocks[i]>>j)&1);
-       }
-       fprintf(f, "\n");
-}
-
-void fill_random_rhs(_bbm *prhs[], int nblocks)
-{
-   int k, l, block, potential, r, count;
-   _block x;
-   
-   for (block = 0; block < nblocks; block++)
-   {
-       l = prhs[block]->blocksizes[0];
-       potential = (1ul)<<l;
-       k = prhs[block]->nrows;
-       count = 0;
-       
-       for (x = 0; potential > 0 && k > 0; x++, potential--)
-       {
-           //add to block?
-           //  k -> need to add this amount, 
-           r = rand() % potential;
-           if (r < k)
-           {
-               prhs[block]->rows[count][0] = x;
-               count++;
-               k--; 
-           }
-       }
-       
-   }
-}
+int parse_cmd(int argc, char *argv[], _experiment *setup, char **pfn, char **pfo);
 
 void help(char* fn)
 {
@@ -356,7 +88,7 @@ void help(char* fn)
     fprintf(stderr, "[-e] = if enabled, SW only estimates complexity, does not solve the system\n\n");    
 }
 
-int parse_cmd(int argc, char *argv[], _experiment *setup, char **pfn)
+int parse_cmd(int argc, char *argv[], _experiment *setup, char **pfn, char **pfo)
 {
    int c;
    opterr = 0;
@@ -372,7 +104,7 @@ int parse_cmd(int argc, char *argv[], _experiment *setup, char **pfn)
     setup->t = MAXS;
     setup->d = -1;
     
-  while ((c = getopt (argc, argv, "ehk:l:m:n:s:S:f:t:d:")) != -1)
+  while ((c = getopt (argc, argv, "ehk:l:m:n:s:S:f:o:t:d:")) != -1)
     switch (c)
       {
       case 'k':
@@ -401,6 +133,9 @@ int parse_cmd(int argc, char *argv[], _experiment *setup, char **pfn)
         break;
       case 'f':
         *pfn = optarg;
+        break;
+      case 'o':
+        *pfo = optarg;
         break;
       case 'e':
         estimate = 1;
@@ -433,14 +168,15 @@ int main(int argc, char* argv[])
     //variables, equations, equation "degree", num rhs
     _experiment experiment;
     
-    clock_t start, end;  
-    _bbm *pbbm, **prhs;       
+    clock_t start, end;    
     char *fname = NULL;
+    char *oname = NULL;
     FILE *f = NULL;
+    FILE *fout = NULL;
     int estimate, block;
     MRHS_system system;
 
-    estimate = parse_cmd(argc, argv, &experiment, &fname);
+    estimate = parse_cmd(argc, argv, &experiment, &fname, &oname);
     
     if (experiment.seed == -1)
         experiment.seed = time(0);
@@ -453,7 +189,15 @@ int main(int argc, char* argv[])
                return -1;
          }
     }
-	
+    if (oname != NULL)
+    {
+         fout = fopen(oname, "w");     
+         if (fout == NULL)
+         {
+               fprintf(stderr, "Invalid file name: %s\n", oname);
+               return -1;
+         }
+    }	
     //init stats
     init_stats(&experiment); 
 
@@ -463,28 +207,26 @@ int main(int argc, char* argv[])
 
     if (f == NULL)
     {
-        pbbm = create_bbm(experiment.n, experiment.m, experiment.l);
-        prhs = (_bbm**) calloc(pbbm->nblocks, sizeof(_bbm*));
-        for (block = 0; block < pbbm->nblocks; block++)
-            //prhs[block] = create_bbm(experiment.k-1+rand()%3, 1, experiment.l);
-			prhs[block] = create_bbm(experiment.k, 1, experiment.l);
+        system = create_mrhs_fixed(experiment.n, experiment.m, experiment.l, experiment.k);
 
 		if (experiment.d == -1) 
 		{
-        	random_bbm(pbbm);
+        	fill_mrhs_random(&system);
         }
         else
         {
-        	random_sparse_bbm(pbbm, experiment.d);
+        	fill_mrhs_random_sparse_extra(&system, experiment.d);
         }
-        fill_random_rhs(prhs, pbbm->nblocks);
     }
     else
     {
-        system = read_system_sage_new(f);
-        pbbm = system.pbbm;
-        prhs = system.prhs;
+        system = read_mrhs_variable(f);
         fclose(f);
+        
+        experiment.m = system.nblocks;
+        experiment.n = system.nblocks == 0 ? 0 : system.pM[0].nrows;
+        experiment.l = system.nblocks == 0 ? 0 : system.pS[0].ncols;
+        experiment.k = system.nblocks == 0 ? 0 : system.pS[0].nrows;
     }
     
     if (experiment.seed2 == -1)
@@ -503,16 +245,21 @@ int main(int argc, char* argv[])
 
     
 #if (_VERBOSITY > 2)
-    print(stdout, pbbm, 0);
-    fprintf(stdout,"-------------------------\n");
-    print_rhs(stdout, prhs, pbbm->nblocks);
+    print_mrhs(stdout, system);
 #endif    
+
+	if (fout != NULL)
+	{
+		write_mrhs_variable(fout, system);
+		fclose(fout);
+		fout = NULL;
+	}
     
     if (!estimate)
     {   
         start = clock(); 
         //xors -> count of eval, total -> number of restarts
-        experiment.count = solve(pbbm, prhs, start+experiment.t*CLOCKS_PER_SEC, &experiment.xors, &experiment.total);
+        experiment.count = solve(system, start+experiment.t*CLOCKS_PER_SEC, &experiment.xors, &experiment.total);
         end = clock();
         experiment.t= (end-start)/(double)CLOCKS_PER_SEC;
     }
@@ -537,10 +284,7 @@ int main(int argc, char* argv[])
                experiment.xors, experiment.xor2, experiment.xor1);
 #endif
         
-    for (block = 0; block < pbbm->nblocks; block++)
-        free_bbm(prhs[block]); 
-    free(prhs);
-    free_bbm(pbbm);
+    clear_MRHS(&system);
      
     //system("pause");
     return 0;

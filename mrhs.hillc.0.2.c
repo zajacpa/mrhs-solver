@@ -15,86 +15,6 @@
 #include "mrhs.hillc.h"
 
 ////////////////////////////////////////////////////////////////////////////////
-// BBM Constructors and destructors
-
-/// Creates a dynamic BlockBitMatrix with nrows and nblocks, 
-///   each with the same blocksize, blocks filled with zeroes
-/// alloc: array of pointers
-/// PRE: nblocks > 0, 0 < blocksize <= MAXBLOCKSIZE, nrows > 0
-_bbm* create_bbm(int nrows, int nblocks, int blocksize)
-{
-    _bbm *pbbm; 
-    int i;
-    
-    pbbm = (_bbm*) malloc(1 * sizeof(_bbm));
-    
-    pbbm->nblocks    = nblocks;
-    pbbm->blocksizes = (int*) malloc(nblocks * sizeof(int));
-    pbbm->pivots     = (int*) malloc(nblocks * sizeof(int));
-    
-    pbbm->ncols = 0;
-    for (i = 0; i < nblocks; i++) {
-        pbbm->blocksizes[i] = blocksize;
-        pbbm->pivots[i]     = 0;
-        pbbm->ncols        += blocksize;
-    }
-
-    pbbm->nrows      = nrows;
-    pbbm->rows = (_block**) malloc(nrows * sizeof(_block*));
-    for (i = 0; i < nrows; i++) {
-        pbbm->rows[i] = (_block*) calloc(nblocks, sizeof(_block));
-    }
-    
-    return pbbm;
-}
-
-/// Creates a dynamic BlockBitMatrix with nrows and nblocks, 
-///   each with the same blocksize, blocks filled with zeroes
-/// alloc: array of pointers
-/// PRE: nblocks > 0, 0 < blocksize <= MAXBLOCKSIZE, nrows > 0
-_bbm* create_bbm_new(int nrows, int nblocks, int blocksizes[])
-{
-    _bbm *pbbm; 
-    int i;
-    
-    pbbm = (_bbm*) malloc(1 * sizeof(_bbm));
-    
-    pbbm->nblocks    = nblocks;
-    pbbm->blocksizes = (int*) malloc(nblocks * sizeof(int));
-    pbbm->pivots     = (int*) malloc(nblocks * sizeof(int));
-    
-    pbbm->ncols = 0;
-    for (i = 0; i < nblocks; i++) {
-        pbbm->blocksizes[i] = blocksizes[i];
-        pbbm->pivots[i]     = 0;
-        pbbm->ncols        += blocksizes[i];
-    }
-
-    pbbm->nrows      = nrows;
-    pbbm->rows = (_block**) malloc(nrows * sizeof(_block*));
-    for (i = 0; i < nrows; i++) {
-        pbbm->rows[i] = (_block*) calloc(nblocks, sizeof(_block));
-    }
-    
-    return pbbm;
-}
-
-///free space allocated to internal _bbm structures
-void free_bbm(_bbm* pbbm)
-{
-    int i; 
-    for (i = 0; i < pbbm->nrows; i++) {
-        free(pbbm->rows[i]);
-    }    
-    free(pbbm->rows);
-   
-    free(pbbm->pivots);
-    free(pbbm->blocksizes);
-
-    free(pbbm);
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // Sparse bit array
 
 typedef struct _sba {
@@ -124,20 +44,19 @@ int cmp_block(const void* a, const void* b)
 	return -1;
 }
 
-SparseBitArray* to_sparse_bit_array(_bbm *pbbm)
+SparseBitArray* to_sparse_bit_array(_bm bm)
 {
 	//ASSERT(pbbm->nblocks == 1)
-	if (pbbm->nblocks < 1 || pbbm->nrows < 1)
+	if (bm.nrows < 1)
 		return NULL;
 	
 	SparseBitArray* sba = (SparseBitArray*) calloc(1, sizeof(SparseBitArray));
-	int block = 0;
-	int width = pbbm->blocksizes[block];
+	int width = bm.ncols;
 	
 	//simple algorithm: only one value, place it at given offset
-	if (pbbm->nrows == 1)
+	if (bm.nrows == 1)
 	{
-		sba->offset = pbbm->rows[0][block];
+		sba->offset = bm.rows[0];
 		sba->value  = ONE;
 		sba->next   = NULL;
 		return sba;
@@ -148,9 +67,9 @@ SparseBitArray* to_sparse_bit_array(_bbm *pbbm)
 		sba->offset = ZERO;
 		sba->value  = ZERO;
 		
-		for (int row = 0; row < pbbm->nrows; row++)
+		for (int row = 0; row < bm.nrows; row++)
 		{
-			sba->value ^= (ONE << pbbm->rows[row][block]);
+			sba->value ^= (ONE << bm.rows[row]);
 		}
 		
 		sba->next = NULL;
@@ -160,12 +79,12 @@ SparseBitArray* to_sparse_bit_array(_bbm *pbbm)
 	//complex algorithm, multiple bit blocks
 	
 	//step1: sort values
-	_block values[pbbm->nrows];
-	for (int row = 0; row < pbbm->nrows; row++)
+	_block values[bm.nrows];
+	for (int row = 0; row < bm.nrows; row++)
 	{
-		values[row] = pbbm->rows[row][block];
+		values[row] = bm.rows[row];
 	}
-	qsort(values, pbbm->nrows, sizeof(_block), cmp_block);
+	qsort(values, bm.nrows, sizeof(_block), cmp_block);
 	
 	//step2: initial position
 	SparseBitArray* start = sba;
@@ -173,7 +92,7 @@ SparseBitArray* to_sparse_bit_array(_bbm *pbbm)
 	sba->value  = ONE;
 	sba->next   = NULL;
 		
-	for (int row = 1; row < pbbm->nrows; row++)
+	for (int row = 1; row < bm.nrows; row++)
 	{
 		//add other positions
 		// if within continues block, store it
@@ -213,32 +132,34 @@ void free_sba(SparseBitArray* sba)
 //   RHS sets as sparse bit arrays
 
 typedef struct _cmrhs {
-   _bbm *pbbm;
+   int  nblocks;
+   const _bm* pM;
    SparseBitArray **rhs; // sparse bit array for each RHS set
 } CompressedMRHS;
 
 
 void add_row(_block out[], int row, CompressedMRHS* cmrhs)
 {
-	for (int block = 0; block < cmrhs->pbbm->nblocks; block++)
+	for (int block = 0; block < cmrhs->nblocks; block++)
 	{
-		out[block] ^= cmrhs->pbbm->rows[row][block];
+		out[block] ^= cmrhs->pM[block].rows[row];
 	}		
 }
 
 //PRE: pbbm and prhs are valid MRHS system
-CompressedMRHS* prepare(_bbm *pbbm, _bbm *prhs[])
+CompressedMRHS* prepare(MRHS_system system)
 {   
     CompressedMRHS *cmrhs;
     
     //allocate compressed representation of MRHS
     cmrhs = (CompressedMRHS*) calloc(1, sizeof(CompressedMRHS));
-    cmrhs->pbbm = pbbm;
-      
-    cmrhs->rhs = (SparseBitArray**) calloc(cmrhs->pbbm->nblocks, sizeof(SparseBitArray*));
-    for (int block = 0; block < cmrhs->pbbm->nblocks; block++)
+    cmrhs->nblocks = system.nblocks;
+    cmrhs->pM      = system.pM;
+    
+    cmrhs->rhs = (SparseBitArray**) calloc(cmrhs->nblocks, sizeof(SparseBitArray*));
+    for (int block = 0; block < cmrhs->nblocks; block++)
     {
-		cmrhs->rhs[block] = to_sparse_bit_array(prhs[block]);
+		cmrhs->rhs[block] = to_sparse_bit_array(system.pS[block]);
 	}
     
     return cmrhs;
@@ -249,7 +170,7 @@ void free_cmrhs(CompressedMRHS* cmrhs)
 {
     int row, block;
     
-    for (block = 0; block < cmrhs->pbbm->nblocks; block++)
+    for (block = 0; block < cmrhs->nblocks; block++)
     {
 		free_sba(cmrhs->rhs[block]);
 	}
@@ -262,7 +183,7 @@ int evaluate(_block rhs[], CompressedMRHS* cmrhs)
 {
 	_block value;
 	_block sum = 0;
-    for (int block = 0; block < cmrhs->pbbm->nblocks; block++)
+    for (int block = 0; block < cmrhs->nblocks; block++)
 	{
 		value = sba_value_at(cmrhs->rhs[block], rhs[block]);
 		sum += (ONE-value);  //if not in RHS, add one to evaluate
@@ -275,22 +196,26 @@ int evaluate(_block rhs[], CompressedMRHS* cmrhs)
 #endif    
 
 //PRE: pbbm and prhs are valid MRHS system
-long long int solve(_bbm *pbbm, _bbm *prhs[], int maxs, long long int* pCount, long long int* pRestarts)
+long long int solve(MRHS_system system, int maxs, long long int* pCount, long long int* pRestarts)
 {
-	CompressedMRHS* cmrhs = prepare(pbbm, prhs);
+	if (system.nblocks == 0)
+		return 0;
+	
+	CompressedMRHS* cmrhs = prepare(system);
 	long long int count = 0;
-	int diff, bestdiff, bestix, restart;
+	int diff, bestdiff, bestix, restart, nrows;
 	
-	_block *solution = (_block*) malloc(pbbm->nrows * sizeof(_block));
+	nrows = system.pM[0].nrows;
+	_block *solution = (_block*) malloc( nrows * sizeof(_block));
 	
-	_block *rhs  =(_block*) malloc(cmrhs->pbbm->nblocks * sizeof(_block));
-	_block *tmp  =(_block*) malloc(cmrhs->pbbm->nblocks * sizeof(_block));
+	_block *rhs  =(_block*) malloc(cmrhs->nblocks * sizeof(_block));
+	_block *tmp  =(_block*) malloc(cmrhs->nblocks * sizeof(_block));
 	
 	for (restart = 0; clock() < maxs; restart++)
 	{	
 		//initialize random solution
-		memset(rhs, 0, cmrhs->pbbm->nblocks * sizeof(_block));
-		for (int row = 0; row < cmrhs->pbbm->nrows; row++)
+		memset(rhs, 0, cmrhs->nblocks * sizeof(_block));
+		for (int row = 0; row < nrows; row++)
 		{
 			solution[row] = rand() % 2;
 			if (solution[row] != 0)
@@ -305,9 +230,9 @@ long long int solve(_bbm *pbbm, _bbm *prhs[], int maxs, long long int* pCount, l
 		{
 			bestix = -1;
 			//for each row:
-			for (int row = 0; row < pbbm->nrows; row++)
+			for (int row = 0; row < nrows; row++)
 			{
-				memcpy(tmp, rhs, cmrhs->pbbm->nblocks * sizeof(_block));
+				memcpy(tmp, rhs, cmrhs->nblocks * sizeof(_block));
 				add_row(tmp, row, cmrhs);
 				diff = evaluate(tmp, cmrhs);
 				
@@ -348,7 +273,7 @@ long long int solve(_bbm *pbbm, _bbm *prhs[], int maxs, long long int* pCount, l
 	{
 	#if (_VERBOSITY > 1)
 		printf("Solution found in %i restarts: ", restart);
-		for (int row = 0; row < cmrhs->pbbm->nrows; row++)
+		for (int row = 0; row < nrows; row++)
 		{
 			printf("%lu", solution[row]);
 		}
