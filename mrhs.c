@@ -102,7 +102,7 @@ void fill_mrhs_random_sparse_extra(MRHS_system *psystem, int density)
 		int block = rand() % psystem->nblocks;
 		int row   = rand() % psystem->pM[block].nrows;
 		int col   = rand() % psystem->pM[block].ncols;
-		psystem->pM[block].rows[row] |= (ONE << col);     	   
+		set_one_bm(&psystem->pM[block], row, col);     	   
 	}	
 }
 
@@ -143,7 +143,7 @@ MRHS_system read_mrhs_variable(FILE *f)
 			
 		for (block = 0; block < system.nblocks; block++)
 		{
-			read_block(f, system.pM[block], row);
+			read_block_bm(f, system.pM[block], row);
 		}   
 		//remove terminator
 		fscanf(f, "]\n"); 
@@ -157,7 +157,7 @@ MRHS_system read_mrhs_variable(FILE *f)
 			// skip until beggining of row is found
 			while (fscanf(f, "%c", &c) && c != '[') { /* skip */ } 
 
-			read_block(f, system.pS[block], row);
+			read_block_bm(f, system.pS[block], row);
 
 			//remove terminator
 			fscanf(f, "]\n"); 
@@ -190,7 +190,7 @@ int write_mrhs_variable(FILE *f, MRHS_system system)
 		fprintf(f, "[ ");
 		for (block = 0; block < system.nblocks; block++)
 		{
-			print_block(f, system.pM[block], row);
+			print_block_bm(f, system.pM[block], row);
 			fprintf(f, " ");
 		}
 		fprintf(f, "]\n");
@@ -200,10 +200,10 @@ int write_mrhs_variable(FILE *f, MRHS_system system)
 	for (block = 0; block < system.nblocks; block++)
 	{
 		fprintf(f, "\n");
-		for (row = 0; row < maxrhs; row++)
+		for (row = 0; row < system.pS[block].nrows; row++)
 		{     
 			fprintf(f, "[");
-			print_block(f, system.pS[block], row);
+			print_block_bm(f, system.pS[block], row);
 			fprintf(f, "]\n");
 		}
 	} 	
@@ -234,7 +234,7 @@ int print_mrhs(FILE *f, MRHS_system system)
 	{     
 		for (block = 0; block < system.nblocks; block++)
 		{
-			print_block(f, system.pM[block], row);
+			print_block_bm(f, system.pM[block], row);
 			fprintf(f, " ");
 		}
 		fprintf(f, "\n");
@@ -263,7 +263,7 @@ int print_mrhs(FILE *f, MRHS_system system)
 				continue;
 			}   
 
-			print_block(f, system.pS[block], row);
+			print_block_bm(f, system.pS[block], row);
 			fprintf(f, " ");
 		}
 		fprintf(f, "\n");

@@ -42,6 +42,24 @@ void clear_bm(_bm* pbm)
 }
 
 
+_block get_bit_bm(_bm *bm, int row, int col)
+{
+	return (bm->rows[row] >> col) & ONE;
+}
+void set_one_bm(_bm *bm, int row, int col)
+{
+	bm->rows[row] |= (ONE << col);	
+}
+void set_zero_bm(_bm *bm, int row, int col)
+{
+	bm->rows[row] &= ~(ONE << col);	
+}
+void set_bit_bm(_bm *bm, int row, int col, _block bit)
+{
+	bm->rows[row] &= ~(ONE << col);	
+	bm->rows[row] |= ((bit&ONE) << col);	
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Utility functions - random generation
 
@@ -120,7 +138,7 @@ void random_sparse_cols_bm(_bm *pbm)
 
 /// --------------------------------------------------------------------
 /// I/O
-void print_block(FILE* f, _bm bm, int row)
+void print_block_bm(FILE* f, _bm bm, int row)
 {
 	_block data = bm.rows[row]; 
 	for (int bit = 0; bit < bm.ncols; bit++, data>>=1)
@@ -128,7 +146,7 @@ void print_block(FILE* f, _bm bm, int row)
 		fprintf(f, "%lu", data&ONE);
 	}
 }
-int read_block(FILE* f, _bm bm, int row)
+int read_block_bm(FILE* f, _bm bm, int row)
 {
 	int c = 0, read;
 	_block data = ZERO;
@@ -139,4 +157,51 @@ int read_block(FILE* f, _bm bm, int row)
 	}
 	bm.rows[row] = data;
 	return c;
+}
+
+/// --------------------------------------------------------------------
+/// Linear algebra
+
+///row dest ^= source 
+void add_row_bm(_bm *pbm, int dest, int source)
+{
+     pbm->rows[dest] ^= pbm->rows[source];
+}
+
+///swaps rows i and j
+void swap_row_bm(_bm *pbm, int i, int j)
+{
+     _block tmp   = pbm->rows[i]; 
+     pbm->rows[i] = pbm->rows[j];
+     pbm->rows[j] = tmp;
+}
+
+///swaps cols in a block
+void swap_cols_bm(_bm *pbm, int col1, int col2)
+{
+     _block data;
+     _block mask = ((ONE)<<col1) | ((ONE)<<col2);  
+     
+     for (int row = 0; row < pbm->nrows; row++)
+     {
+         data  = pbm->rows[row];
+         //if both are same, no change, otherwise change both of them
+         data ^= ( ((data >> col1)^(data>>col2))&ONE )*mask; //constant ONE
+         
+         pbm->rows[row] = data;
+     }
+}
+
+///find first non-zero element in given block/mask, from given row index 
+/// -1 if no such exists
+int find_pivot_bm(_bm *pbm, int col, int from)
+{
+	_block mask = (ONE)<<col;
+    while (from < pbm->nrows)
+    {
+        if ((pbm->rows[from] & mask) == ONE)
+            return from;
+        from++;
+    }
+    return -1;
 }

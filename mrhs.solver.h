@@ -6,10 +6,6 @@
 #ifndef _SOLVER_H
 #define _SOLVER_H
 
-//version 1.4
-
-#include <stdint.h>
-
 /***************************************************************************
  * Data structures
  *
@@ -22,7 +18,32 @@
  *  NBLOCKS x {NROWS x {BLOCKDATA}}
  ***************************************************************************/
 
-#include "mrhs.bbm.h"
+
+
+//rounded up
+#define GET_BL(X) (((X)+MAXBLOCKSIZE-1)/MAXBLOCKSIZE)
+
+///main data structure for block bit matrix 
+typedef struct {
+   int nblocks;      // number of blocks - size of internal array in each row
+   int *blocksizes;  // blocksizes in each block - max MAXBLOCKSIZE   
+   int *pivots;      // number of pivots in each block (or special use)
+   int nrows;        // number of rows
+   int ncols;		   // total number of columns = sum of blocksizes
+   _block **rows;      // storage: array of nrows pointers to arrays of blocks
+} _bbm;
+
+/// Creates a dynamic BlockBitMatrix with nrows and nblocks, 
+///   each with the same blocksize, blocks filled with zeroes
+/// alloc: array of pointers
+/// PRE: nblocks > 0, 0 < blocksize <= MAXBLOCKSIZE, nrows > 0
+_bbm* create_bbm(int nrows, int nblocks, int blocksize);
+
+_bbm* create_bbm_new(int nrows, int nblocks, int blocksizes[]);
+
+
+///free space allocated to internal _bbm structures
+void free_bbm(_bbm* pbbm);
 
 /// Creates an echelon form of matrix and computes number of pivots
 ///  swaps columns so that pivots form identity matrix at the start of block

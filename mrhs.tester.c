@@ -7,8 +7,9 @@
  * v1.3: refactoring + solution reporting + variable sized blocks
  * v1.4: minor fixes (reporting)
  * v1.6: fix input type - int to 64 bit when constructing matrix
+ * v1.7: refactoring + integration of HC 
  *  
- * Compilation: gcc -o mrhs mrhs.1.4.c tester.c -lm
+ * Compilation: make...
  **********************************/
  
 #include <stdint.h>
@@ -19,205 +20,114 @@
 #include <unistd.h>
 #include <math.h>
 
-#include "mrhs.solver.h"
+#include "mrhs.bv.h"
+#include "mrhs.hillc.h"
+#include "mrhs.rz.h"
 
-////////////////////////////////////////////////////////////////////////////////
-// Macros and control structures
+
+/// ////////////////////////////////////////////////////////////////////
+/// Stats and reporting
 
 //0 -> stats only
 //1 -> pretty print of stats
 //2 -> include solutions
 //3 -> include original system
-//4 -> include modified system
-//5 -> include LUT
-//6 -> include S*M
+//4 -> include statistics
+
 #ifndef _VERBOSITY
- #define _VERBOSITY 2
+ #define _VERBOSITY 4
 #endif
 
-//setup of experiment and stats
+#define RZ_SOLVER_TYPE 1
+#define HC_SOLVER_TYPE 2
+
+
+typedef struct {
+  int rank; // row rank of the system (typically: rank == n)
+  
+  // number of solutions
+  long long int count;
+  
+  // number of lookups (loops),
+  long long int total; 
+  
+  // predicted number of lookups
+  double expected;
+  
+  // counted number of xors  
+  long long int xors; 
+  
+  // predicted number of xors (all), predicted number without adding zero-rows
+  double xor1, xor2;
+  
+  // measured time in seconds  
+  double t;
+} _stats;
+
+// Global pointer to experimental setup and stat reporting
+static _stats *gp_stats = NULL;
+// Sets gp_experiment to point to setup, and resets stats (count, total, xors, t)
+void init_stats(_stats *stats);
+
+//init stats
+void init_stats(_stats *stats)
+{
+	stats->rank     = 0;
+	
+    stats->xors     = 0; 
+    stats->count    = 0;
+    stats->total    = 0;
+
+	stats->expected = 0.0;
+    stats->xor1     = 0.0; 
+    stats->xor2     = 0.0; 
+    stats->t        = 0.0; 
+    
+    gp_stats = stats;
+}
+
+/// ////////////////////////////////////////////////////////////////////
+/// Command line interface
+
+
+//setup of experiments
 typedef struct {
   int n,    // number of variables,      CMD LINE -n
       m,    // number of MRHS equations, CMD LINE -m
       l,    // dimension of RHS,         CMD LINE -l
       k;    // number of vectors in RHS, CMD LINE -k
-  int seed; // seed for random generator, CMD LINE -s
-  int rank; // row rank of the system (typically: rank == n)
+  int seed; // seed for system generator, CMD LINE -s
+  int seed2;// seed for solver, CMD LINE -S
   
-  int d;    // system density 
+  int d;       //system density
+  double maxt; //time limit in seconds
+  int solve;   //solver type
   
-  // number of solutions
-  long long int count;
-  // number of lookups (loops), predicted number of lookups
-  long long int total; double expected;
-  // counted number of xors, predicted number of xors (all), predicted number without adding zero-rows 
-  long long int xors; double xor1, xor2;
-  // measured time in seconds  
-  double t;
+  char *in;    // system  input file
+  char *out;   // system output file
+  FILE *fsols; // open output file for solutions
 } _experiment;
-
-// Global pointer to experimental setup and stat reporting
-static _experiment *gp_experiment = NULL;
-// Sets gp_experiment to point to setup, and resets stats (count, total, xors, t)
-void init_stats(_experiment *setup);
 
 // Fills in experimental setup from command line arguments
 //   Additionally: returns file name conatining eq. system, CMD LINE -f
 //                 returns flag, whether run full experiment or just estimate, CMD LINE -e   
-int parse_cmd(int argc, char *argv[], _experiment *setup, char **pfn);
-
-
-///print block matrix solution - final solutions are on diagonal
-
-void print_sol(FILE* f, _bbm *pbbm, ActiveListEntry* ale)
-{
-     int j, block, bitoffset;
-     _block value;
-     
-     bitoffset = 0;
-       for (block = 0; block < pbbm->nblocks; block++)
-       {
-          //nr = ale[block].u; 
-          //value = (nr[bitoffset/MAXBLOCKSIZE]>>(bitoffset%MAXBLOCKSIZE))^ (nr[bitoffset/MAXBLOCKSIZE+1]<<(MAXBLOCKSIZE-bitoffset%MAXBLOCKSIZE));
-          value = ale[block].val;
-          
-          for (j = 0; j < pbbm->blocksizes[block]; j++, value>>=1)
-          {
-              fprintf(f, "%lx", value&1);
-          }
-          fprintf(f, " ");
-          bitoffset += pbbm->blocksizes[block];
-       }
-       fprintf(f, "\n");
-    
-}
-
-void report_solution(long long int counter, _bbm *pbbm, ActiveListEntry* ale)
-{
-     printf("solution: %lli\n", counter);
-     print_sol(stdout, pbbm, ale);     
-}
-
-_bbm *GlobalA = NULL;
-
-//TODO: create function in solver to get solution y, and to multiply y*A
-void report_solution_extract_y(long long int counter, _bbm *pbbm, ActiveListEntry* ale)
-{
-     int block, pivot, i;
-     _block value, y[pbbm->nrows];
-     
-     printf("solution: %lli\n", counter);
-     print_sol(stdout, pbbm, ale);   
-
-     //TODO: create better functions for this...
-     i = 0;
-     printf("Vector y: ");     
-     for (block = 0; block < pbbm->nblocks; block++)
-     {
-         value = ale[block].val;
-         value>>=(pbbm->blocksizes[block]-pbbm->pivots[block]);
-         for (pivot = 0; pivot < pbbm->pivots[block]; pivot++, value>>=1)
-         {
-             y[i++] = value&1;
-             fprintf(stdout, "%lx", value&1);
-         }
-     }
-     printf("\n");     
-     
-     printf("Vector x: ");     
-     for (block = 0; block < GlobalA->nblocks; block++)
-     {
-         value = 0;
-         for (i = 0; i < GlobalA->nrows; i++)
-         {
-            value ^= y[i] & GlobalA->rows[i][block];
-         }
-         fprintf(stdout, "%lx", value&1);
-     }
-     printf("\n");     
-    
-}
-
-
-
-///print raw block data in hex
-void print_raw_blocks(FILE* f, _block *blocks, int count, int bl)
-{
-     int i, j;
-       for (i = 0; i < count; i++)
-       {
-       	  for (j = 0; j < bl; j++)
-			fprintf(f, "%0lx", (blocks[i]>>j)&1);
-       }
-       fprintf(f, "\n");
-}
-
-///print block matrix solution - final solutions are on diagonal
-void print_luts(FILE* f, ActiveListEntry* ale, int count, int blockcount, int bl)
-{
-     _block value;
-     int block;
-     _block size;
-     TableEntry *p;
-     
-     for (block = 0; block < count; block++)
-     {
-        size = ale[block].mask + 1;
-        fprintf(f, "LUT %i of size %lu:\n", block, size);
-        
-        for (value = 0; value < size; value++)
-        {
-        	p = ale[block].LUT[value];
-            fprintf(f, "\t%p\n", p);
-            while (p != NULL)
-            {
-                fprintf(f, "\t\t%lx\n", p->value);
-                if (p->sm_row != NULL) print_raw_blocks(f, p->sm_row, blockcount, bl);
-                p = p->next;
-			}
-            fprintf(f, "\n");               
-        }
-     }
-     fprintf(f, "\n");   
-}
-
-void fill_random_rhs(_bbm *prhs[], int nblocks)
-{
-   int k, l, block, potential, r, count;
-   _block x;
-   
-   for (block = 0; block < nblocks; block++)
-   {
-       l = prhs[block]->blocksizes[0];
-       potential = (1ul)<<l;
-       k = prhs[block]->nrows;
-       count = 0;
-       
-       for (x = 0; potential > 0 && k > 0; x++, potential--)
-       {
-           //add to block?
-           //  k -> need to add this amount, 
-           r = rand() % potential;
-           if (r < k)
-           {
-               prhs[block]->rows[count][0] = x;
-               count++;
-               k--; 
-           }
-       }
-       
-   }
-}
+int parse_cmd(int argc, char *argv[], _experiment *setup);
 
 void help(char* fn)
 {
-    fprintf(stderr, "\nUsage: %s [-n N] [-m M] [-l L] [-k K] [-s SEED] [-f FILE] [-e]\n", fn);
+    fprintf(stderr, "\nUsage: %s [-n N] [-m M] [-l L] [-k K] [-s SEED] [-S SED2] [-f FILE] [-o OUT] [-e TYPE] [-t MAXT]\n", fn);
     fprintf(stderr, "   N = number of variables (def. 10)\n");    
     fprintf(stderr, "   M = number of MRHS eqs  (def. 10)\n");    
     fprintf(stderr, "   L = dimension of RHSs   (def. 3)\n");    
     fprintf(stderr, "   K = num. vectors in RHS (def. 4)\n\n");    
+    fprintf(stderr, "MAXT = time limit (in seconds)\n");    
+    fprintf(stderr, "SEED = randomness seed for MRHS system\n");    
+    fprintf(stderr, "SED2 = randomness seed for computation\n\n"); 
+       
+    fprintf(stderr, "TYPE = solver type: 0=no solver, %d=Raddum-Zajac, %d=HC\n\n", RZ_SOLVER_TYPE, HC_SOLVER_TYPE);    
 
     fprintf(stderr, "FILE = file containing MRHS system \n      (if none, system is randomly generated using SEED)\n");    
+    fprintf(stderr, "OUT  = file to write out generated MRHS system \n\n");    
     fprintf(stderr, "File format: METADATA {numbers N M L1 K1 .. Lm Km} \n");    
     fprintf(stderr, "           N  VECTORS of size M*SUM(Li) {rows of joint system matrix}\n");    
     fprintf(stderr, "           K1 VECTORS of size L1   {vectors in 1st RHS} \n");
@@ -226,25 +136,38 @@ void help(char* fn)
     fprintf(stderr, "           Km VECTORS of size Lm   {vectors in m-th RHS} \n");
     fprintf(stderr, "        example VECTOR = [0 1 0 1 1 0] (size 6)\n\n");            
 
-    fprintf(stderr, "[-e] = if enabled, SW only estimates complexity, does not solve the system\n\n");    
+    //fprintf(stderr, "[-e] = if enabled, SW only estimates complexity, does not solve the system\n\n");    
 }
 
-int parse_cmd(int argc, char *argv[], _experiment *setup, char **pfn)
+void set_default_experiment(_experiment *setup)
+{
+    //default settings    
+    setup->n     = 10;   //system size
+    setup->m     = 10; 
+    setup->l     = 3; 
+    setup->k     = 4; 
+    
+    setup->seed  = -1;   //time based seeds
+    setup->seed2 = -1; 
+    
+    setup->maxt  = 1.0;  //1s max for HC
+    setup->d     = -1;   //dense matrix
+    setup->solve = RZ_SOLVER_TYPE;    //try to solve with RZ solver
+    
+    setup->in    = NULL; //no input/output	
+    setup->out   = NULL; 
+    setup->fsols = NULL; //TODO...	
+}
+
+int parse_cmd(int argc, char *argv[], _experiment *setup)
 {
    int c;
    opterr = 0;
-   int estimate = 0;
-
-    //default settings    
-    setup->n = 10; 
-    setup->m = 10; 
-    setup->l = 3; 
-    setup->k = 4; 
-    setup->seed = -1; 
-    setup->d = -1;
-
-  while ((c = getopt (argc, argv, "ehk:l:m:n:s:f:t:d:")) != -1)
-    switch (c)
+ 
+   set_default_experiment(setup);
+    
+   while ((c = getopt (argc, argv, "e:hk:l:m:n:s:S:f:o:t:d:")) != -1)
+      switch (c)
       {
       case 'k':
         sscanf(optarg, "%i", &(setup->k));
@@ -264,14 +187,20 @@ int parse_cmd(int argc, char *argv[], _experiment *setup, char **pfn)
       case 's':
         sscanf(optarg, "%i", &(setup->seed));
         break;
-      case 'f':
-        *pfn = optarg;
+      case 'S':
+        sscanf(optarg, "%i", &(setup->seed2));
         break;
       case 't':
-        //ignore, for compatibility
+        sscanf(optarg, "%lf", &(setup->maxt));
+        break;
+      case 'f':
+        setup->in = optarg;
+        break;
+      case 'o':
+        setup->out = optarg;
         break;
       case 'e':
-        estimate = 1;
+        sscanf(optarg, "%i", &(setup->solve));
         break;
       case '?':
       case 'h':
@@ -281,177 +210,196 @@ int parse_cmd(int argc, char *argv[], _experiment *setup, char **pfn)
         abort ();
       }
 
-
-   return estimate;
+   return 1;
 }
 
-//init stats
-void init_stats(_experiment *setup)
+int prepare_system(MRHS_system *system, _experiment *setup)
 {
-    gp_experiment = setup;
-    setup->xors  = 0; 
-    setup->count = 0;
-    setup->total = 0;
-    setup->t     = 0.0;
-}
-
-int main(int argc, char* argv[])
-{
-    //variables, equations, equation "degree", num rhs
-    _experiment experiment;
-    ActiveListEntry* pActiveList;
-    
-    clock_t start, end;  
-    _bbm *pbbm, **prhs, *pA = NULL;       
-    char *fname = NULL;
     FILE *f = NULL;
-    int estimate, block;
-    MRHS_system system;
+    FILE *fout = NULL;
 
-    estimate = parse_cmd(argc, argv, &experiment, &fname);
-    
-    if (experiment.seed == -1)
-        experiment.seed = time(0);
-    if (fname != NULL)
+    //check I/O files
+    if (setup->in != NULL)
     {
-         f = fopen(fname, "r");     
-         if (f == NULL)
-         {
-               fprintf(stderr, "Invalid file name: %s\n", fname);
-               return -1;
-         }
-    }
-	
-    //init stats
-    init_stats(&experiment); 
-
-    
-    srand(experiment.seed);
-
-
-    if (f == NULL)
-    {
-        pbbm = create_bbm(experiment.n, experiment.m, experiment.l);
-        prhs = (_bbm**) calloc(pbbm->nblocks, sizeof(_bbm*));
-        for (block = 0; block < pbbm->nblocks; block++)
-            prhs[block] = create_bbm(experiment.k, 1, experiment.l);
-
-		if (experiment.d == -1)
-		{
-        	random_bbm(pbbm);
-        }
-        else
+		//read MRHS system from file
+        f = fopen(setup->in, "r");     
+        if (f == NULL)
         {
-        	random_sparse_bbm(pbbm, experiment.d);
+           fprintf(stderr, "Invalid file name: %s\n", setup->in);
+           return 0;
         }
-        fill_random_rhs(prhs, pbbm->nblocks);
+        
+        *system = read_mrhs_variable(f);
+        fclose(f);
+        
+        setup->m = system->nblocks;
+        setup->n = system->nblocks == 0 ? 0 : system->pM[0].nrows;
+        setup->l = system->nblocks == 0 ? 0 : system->pS[0].ncols;
+        setup->k = system->nblocks == 0 ? 0 : system->pS[0].nrows;
     }
     else
     {
-        system = read_system_sage_new(f);
-        pbbm = system.pbbm;
-        prhs = system.prhs;
-        fclose(f);
-    }
+		//create random system
+		if (setup->seed == -1)
+			setup->seed = time(0);
+		srand(setup->seed);
+		
+		//empty system:
+        *system = create_mrhs_fixed(setup->n, setup->m, setup->l, setup->k);
+        
+		//dense or sparse?
+		if (setup->d == -1) 
+		{
+        	fill_mrhs_random(system);
+        }
+        else
+        {
+        	fill_mrhs_random_sparse_extra(system, setup->d);
+        }		
+	}
     
+    //report system ?
+    if (setup->out != NULL)
+    {
+         fout = fopen(setup->out, "w");     
+         if (fout == NULL)
+         {
+               fprintf(stderr, "Invalid file name: %s\n", setup->out);
+               return 0;
+         }
+         write_mrhs_variable(fout, *system);
+         setup->fsols = fout;
+    }	
+    
+	return 1;
+}
+
+
+int main(int argc, char* argv[])
+{
+	//working with this system
+    MRHS_system system; 
+    _bv *results = NULL;
+    
+    //input settings: variables, equations, equation "degree", num rhs
+    _experiment experiment;
+    
+    //output statistics:
+    _stats stats;
+    
+    //time and IO 
+    clock_t start, end;   
+
+	//prepare parameters
+    if (!parse_cmd(argc, argv, &experiment))
+		return -1;
+ 
+ 	if (!prepare_system(&system, &experiment))
+		return -2;
+
+    //init stats
+    init_stats(&stats); 
+    
+    //init random generator for experiments
+    if (experiment.seed2 == -1)
+        experiment.seed2 = time(0);
+    srand(experiment.seed2);	
+     
 #if (_VERBOSITY > 0)
-    printf("Experimental setup, SEED = %08x \n", experiment.seed);
+    printf("Experimental setup, SEED = %08x, SEED2 = %08x \n", experiment.seed, experiment.seed2);
+    if (experiment.in != NULL)
+        printf("Input file: %s\n", experiment.in);
     printf("Num variables n = %i \n", experiment.n);
     printf("Num equations m = %i \n", experiment.m);
     printf("Block length  l = %i \n", experiment.l);
     printf("Block size    k = %i \n", experiment.k);
-    if (f != NULL)
-        printf("File: %s\n", fname);
+    if (experiment.out != NULL)
+        printf("System stored to: %s\n", experiment.out);
 #endif    
-
     
 #if (_VERBOSITY > 2)
-    print(stdout, pbbm, 0);
-    fprintf(stdout,"-------------------------\n");
-    print_rhs(stdout, prhs, pbbm->nblocks);
+    printf("\nInitial MRHS system: \n");
+    print_mrhs(stdout, system);
+    printf("\n");
 #endif    
     
-#if (_VERBOSITY > 1)
-    experiment.rank = echelonize(pbbm, prhs, &pA);
-    GlobalA = pA;
- #if (_VERBOSITY > 3)
-    fprintf(stdout,"Matrix A:\n");
-    print(stdout, pA, 0);
- #endif
-#else			 
-    experiment.rank = echelonize(pbbm, prhs, NULL);
-#endif
-    pActiveList = prepare(pbbm, prhs);
-    experiment.expected = get_expected(pbbm,prhs);
-
-    experiment.xor1 = get_xor1(pbbm,prhs);
-    experiment.xor2 = get_xor2(pbbm,prhs);
-
-#if (_VERBOSITY > 0)
-    printf("Expected count  = %.0lf \n", experiment.expected);
-#endif    
-
-#if (_VERBOSITY > 3)
-    printf("\nRank: %i\n\n", experiment.rank);
-    print(stdout, pbbm, 1);    
-    print_rhs(stdout, prhs, pbbm->nblocks);
-#endif
-
-#if (_VERBOSITY > 4)
-    printf("\n\nLUTS\n");
-    print_luts(stdout, pActiveList, pbbm->nblocks, GET_NUM_BLOCKS_NEEDED(pbbm->ncols), MAXBLOCKSIZE);       
-#endif
-    
-    if (!estimate)
+	// run the experiment
+	
+	start = clock(); 
+	//xors -> count of eval, total -> number of restarts
+    switch (experiment.solve)
     {   
-        start = clock(); 
+	case HC_SOLVER_TYPE:
+        stats.count = solve_hc(system, &results, start+experiment.maxt*CLOCKS_PER_SEC, &stats.xors, &stats.total);
+        break;
+	case RZ_SOLVER_TYPE:
+        stats.count = solve_rz(system, &results, start+experiment.maxt*CLOCKS_PER_SEC, &stats.xors, &stats.total);
+        break;    
+    }
+	end = clock();
+	stats.t= (end-start)/(double)CLOCKS_PER_SEC;
+		
+	// post processing: report results and clear data structures	
+		
+	if (experiment.fsols != NULL && results != NULL)
+	{
+		for (int i = 0; i < stats.count; i++)
+		{
+			fprintf(experiment.fsols, "\nx ");
+			print_bv(&results[i], experiment.fsols);
+		}
+		
+	}
+	if (experiment.fsols != NULL)
+	{
+		fclose(experiment.fsols);
+	}
+		
+	if (results != NULL)
+	{
+
+		for (int i = 0; i < stats.count; i++)
+		{
 #if (_VERBOSITY > 1)
-        experiment.total = solve(pActiveList, pbbm, &experiment.count, &experiment.xors, report_solution_extract_y);   
-#else			 
-        experiment.total = solve(pActiveList, pbbm, &experiment.count, &experiment.xors, NULL);   
+			fprintf(stdout, "\nSolution %i: ", i+1);
 #endif
-        end = clock();
-        experiment.t= (end-start)/(double)CLOCKS_PER_SEC;
-    }
-    else
-    {
-        experiment.total = experiment.expected;
-        experiment.t = -1.0;
-    }
 
-    free_ales(pActiveList, pbbm->nblocks);
+			print_bv(&results[i], stdout);
+			clear_bv(&results[i]);
+		}
+#if (_VERBOSITY > 1)
+		fprintf(stdout, "\n");
+#endif
+		
+		free(results);
+	}
+	
+	clear_MRHS(&system);
 
+	// post processing, report statistics	
+		
 #if (_VERBOSITY > 0)
     printf("\nXORs: %lld Expected: %.0lf - %.0lf\n", 
-               experiment.xors, experiment.xor2, experiment.xor1);
+               stats.xors, stats.xor2, stats.xor1);
     printf("\nSolutions: %lld\nSearched %lld in %.3lf s, %e per sec\n", 
-               experiment.count, experiment.total, experiment.t, experiment.total/experiment.t);
+               stats.count, stats.total, stats.t, stats.total/stats.t);
 #endif
        
 #if (_VERBOSITY == 0)
 
-    //     SEED   n   m   l  k rank count total time expected
-    printf("%08x\t%i\t%i\t%i\t%i\t", 
-		experiment.seed,experiment.n, experiment.m, experiment.l, experiment.k);
+    //     SEED/SEED2   n   m   l  k rank count total time expected
+    printf("%08x/%08x\t%i\t%i\t%i\t%i\t", 
+		experiment.seed,experiment.seed2,experiment.n, experiment.m, experiment.l, experiment.k);
     printf("%i\t", 
-		experiment.rank);
+		stats.rank);
     printf("%lld\t%lld\t%lf\t%.0lf\t", 	
-               experiment.count, experiment.total, experiment.t, experiment.expected);
+               stats.count, stats.total, stats.t, stats.expected);
     printf("%lld\t%.0lf\t%.0lf\n", 
-               experiment.xors, experiment.xor2, experiment.xor1);
+               stats.xors, stats.xor2, stats.xor1);
 #endif
-        
-    if (pA != NULL)
-        free_bbm(pA);    
-    for (block = 0; block < pbbm->nblocks; block++)
-        free_bbm(prhs[block]); 
-    free(prhs);
-    free_bbm(pbbm);
-     
-        
+             
     //system("pause");
     return 0;
 }
 
 //TODO: check solution, store all solutions?
-

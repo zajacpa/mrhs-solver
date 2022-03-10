@@ -18,7 +18,88 @@
 #include <memory.h>
 #include <math.h>
 
+#include "mrhs.bm.h"
 #include "mrhs.solver.h"
+
+////////////////////////////////////////////////////////////////////////////////
+// BBM Constructors and destructors
+
+/// Creates a dynamic BlockBitMatrix with nrows and nblocks, 
+///   each with the same blocksize, blocks filled with zeroes
+/// alloc: array of pointers
+/// PRE: nblocks > 0, 0 < blocksize <= MAXBLOCKSIZE, nrows > 0
+_bbm* create_bbm(int nrows, int nblocks, int blocksize)
+{
+    _bbm *pbbm; 
+    int i;
+    
+    pbbm = (_bbm*) malloc(1 * sizeof(_bbm));
+    
+    pbbm->nblocks    = nblocks;
+    pbbm->blocksizes = (int*) malloc(nblocks * sizeof(int));
+    pbbm->pivots     = (int*) malloc(nblocks * sizeof(int));
+    
+    pbbm->ncols = 0;
+    for (i = 0; i < nblocks; i++) {
+        pbbm->blocksizes[i] = blocksize;
+        pbbm->pivots[i]     = 0;
+        pbbm->ncols        += blocksize;
+    }
+
+    pbbm->nrows      = nrows;
+    pbbm->rows = (_block**) malloc(nrows * sizeof(_block*));
+    for (i = 0; i < nrows; i++) {
+        pbbm->rows[i] = (_block*) calloc(nblocks, sizeof(_block));
+    }
+    
+    return pbbm;
+}
+
+/// Creates a dynamic BlockBitMatrix with nrows and nblocks, 
+///   each with the same blocksize, blocks filled with zeroes
+/// alloc: array of pointers
+/// PRE: nblocks > 0, 0 < blocksize <= MAXBLOCKSIZE, nrows > 0
+_bbm* create_bbm_new(int nrows, int nblocks, int blocksizes[])
+{
+    _bbm *pbbm; 
+    int i;
+    
+    pbbm = (_bbm*) malloc(1 * sizeof(_bbm));
+    
+    pbbm->nblocks    = nblocks;
+    pbbm->blocksizes = (int*) malloc(nblocks * sizeof(int));
+    pbbm->pivots     = (int*) malloc(nblocks * sizeof(int));
+    
+    pbbm->ncols = 0;
+    for (i = 0; i < nblocks; i++) {
+        pbbm->blocksizes[i] = blocksizes[i];
+        pbbm->pivots[i]     = 0;
+        pbbm->ncols        += blocksizes[i];
+    }
+
+    pbbm->nrows      = nrows;
+    pbbm->rows = (_block**) malloc(nrows * sizeof(_block*));
+    for (i = 0; i < nrows; i++) {
+        pbbm->rows[i] = (_block*) calloc(nblocks, sizeof(_block));
+    }
+    
+    return pbbm;
+}
+
+///free space allocated to internal _bbm structures
+void free_bbm(_bbm* pbbm)
+{
+    int i; 
+    for (i = 0; i < pbbm->nrows; i++) {
+        free(pbbm->rows[i]);
+    }    
+    free(pbbm->rows);
+   
+    free(pbbm->pivots);
+    free(pbbm->blocksizes);
+
+    free(pbbm);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // BBM Echelon form
@@ -245,7 +326,7 @@ ActiveListEntry* prepare(_bbm *pbbm, _bbm *prhs[])
     int block, rhs, offset, k, r;
     _block size, index, value;
     ActiveListEntry *pList;
-    int blocklen = GET_NUM_BLOCKS_NEEDED(pbbm->ncols);  //pbbm->nblocks; //(*pbbm->blocksizes[0]/MAXBLOCKSIZE);
+    int blocklen = GET_BL(pbbm->ncols);  //pbbm->nblocks; //(*pbbm->blocksizes[0]/MAXBLOCKSIZE);
     
     //PRE: pbbm has echelon form, with (I|0) in blocks with free pivots
     //      pivots are stored from LSB bits
@@ -350,7 +431,7 @@ long long int solve_it(ActiveListEntry* ale, _bbm *pbbm, int block,
     _block index;
     TableEntry * active;
     _block *nr, *or, *ar, value;  //new row, old row, active row, value from u
-    int blocklen = GET_NUM_BLOCKS_NEEDED(pbbm->ncols);  //pbbm->nblocks; //(*pbbm->blocksizes[0]/MAXBLOCKSIZE);
+    int blocklen = GET_BL(pbbm->ncols);  //pbbm->nblocks; //(*pbbm->blocksizes[0]/MAXBLOCKSIZE);
     //int blocksize = pbbm->blocksizes[0];  //TODO: variable block sizes...
     int bitoffset;
     
@@ -457,7 +538,7 @@ long long int solve(ActiveListEntry* ale, _bbm *pbbm, long long int *pCount, lon
     long long int total = 0;
     
     //TODO: variable block size
-    int blocklen = GET_NUM_BLOCKS_NEEDED(pbbm->ncols); //pbbm->nblocks; //(*pbbm->blocksizes[0]/MAXBLOCKSIZE);
+    int blocklen = GET_BL(pbbm->ncols); //pbbm->nblocks; //(*pbbm->blocksizes[0]/MAXBLOCKSIZE);
 	_block* solstack = (_block*) calloc(pbbm->nblocks*blocklen, sizeof(_block));
    
     if (pCount != NULL)
