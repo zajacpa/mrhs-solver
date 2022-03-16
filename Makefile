@@ -2,7 +2,7 @@ SRC := src
 OBJ := obj
 OUT := bin
 
-CFLAGS := -D_VERBOSITY=0
+CFLAGS := -D_VERBOSITY=4
 
 $(OBJ)/%.o: $(SRC)/%.c
 	gcc -c $^ -o $@ $(CFLAGS)

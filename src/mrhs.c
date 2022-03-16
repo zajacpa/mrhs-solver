@@ -297,14 +297,17 @@ int linear_substitution(MRHS_system *system, _bv *column, _block rhs)
 
                 //add constant to
                 add_constant_bm(&system->pS[block], rhs, col);
+                count++;
             }
         }
     }
+    return count;
 }
 
 ///remove linear equations from the system
 int remove_linear(MRHS_system *system)
 {
+   int count = 0;
    for (int block = 0; block < system->nblocks; block++)
    {
         if (system->pS[block].nrows == 1)
@@ -313,15 +316,17 @@ int remove_linear(MRHS_system *system)
             {
                 _bv column = get_column_bm(&system->pM[block], col);
                 _block rhs = get_bit_bm(&system->pS[block], 0, col);
-                linear_substitution(system, &column, rhs);
+                count += linear_substitution(system, &column, rhs);
                 clear_bv(&column);
             }
         }
    }
+   return count;
 }
 ///remove linear equations from the system
 int remove_empty(MRHS_system *system)
 {
+    int numblocks = system->nblocks;
    _bv active_rows = create_bv(system->pM->nrows);
 
    for (int block = 0; block < system->nblocks; block++)
@@ -351,6 +356,7 @@ int remove_empty(MRHS_system *system)
         remove_rows_bm(&system->pM[block], &active_rows);
    }
    clear_bv(&active_rows);
+   return numblocks - system->nblocks;
 }
 
 

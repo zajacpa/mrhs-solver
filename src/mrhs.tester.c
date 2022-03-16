@@ -41,6 +41,12 @@
 #define RZ_SOLVER_TYPE 1
 #define HC_SOLVER_TYPE 2
 
+//report: higher verbosity option
+//results: _VERBOSITY == 0 reporting of results
+//help:   help and error messsages
+#define REPORT_FILE     stdout
+#define RESULTS_FILE    stdout
+#define HELP_FILE       stderr
 
 typedef struct {
   int rank; // row rank of the system (typically: rank == n)
@@ -116,26 +122,26 @@ int parse_cmd(int argc, char *argv[], _experiment *setup);
 
 void help(char* fn)
 {
-    fprintf(stderr, "\nUsage: %s [-n N] [-m M] [-l L] [-k K] [-s SEED] [-S SED2] [-f FILE] [-o OUT] [-e TYPE] [-t MAXT]\n", fn);
-    fprintf(stderr, "   N = number of variables (def. 10)\n");
-    fprintf(stderr, "   M = number of MRHS eqs  (def. 10)\n");
-    fprintf(stderr, "   L = dimension of RHSs   (def. 3)\n");
-    fprintf(stderr, "   K = num. vectors in RHS (def. 4)\n\n");
-    fprintf(stderr, "MAXT = time limit (in seconds)\n");
-    fprintf(stderr, "SEED = randomness seed for MRHS system\n");
-    fprintf(stderr, "SED2 = randomness seed for computation\n\n");
+    fprintf(HELP_FILE, "\nUsage: %s [-n N] [-m M] [-l L] [-k K] [-s SEED] [-S SED2] [-f FILE] [-o OUT] [-e TYPE] [-t MAXT]\n", fn);
+    fprintf(HELP_FILE, "   N = number of variables (def. 10)\n");
+    fprintf(HELP_FILE, "   M = number of MRHS eqs  (def. 10)\n");
+    fprintf(HELP_FILE, "   L = dimension of RHSs   (def. 3)\n");
+    fprintf(HELP_FILE, "   K = num. vectors in RHS (def. 4)\n\n");
+    fprintf(HELP_FILE, "MAXT = time limit (in seconds)\n");
+    fprintf(HELP_FILE, "SEED = randomness seed for MRHS system\n");
+    fprintf(HELP_FILE, "SED2 = randomness seed for computation\n\n");
 
-    fprintf(stderr, "TYPE = solver type: 0=no solver, %d=Raddum-Zajac, %d=HC\n\n", RZ_SOLVER_TYPE, HC_SOLVER_TYPE);
+    fprintf(HELP_FILE, "TYPE = solver type: 0=no solver, %d=Raddum-Zajac, %d=HC\n\n", RZ_SOLVER_TYPE, HC_SOLVER_TYPE);
 
-    fprintf(stderr, "FILE = file containing MRHS system \n      (if none, system is randomly generated using SEED)\n");
-    fprintf(stderr, "OUT  = file to write out generated MRHS system \n\n");
-    fprintf(stderr, "File format: METADATA {numbers N M L1 K1 .. Lm Km} \n");
-    fprintf(stderr, "           N  VECTORS of size M*SUM(Li) {rows of joint system matrix}\n");
-    fprintf(stderr, "           K1 VECTORS of size L1   {vectors in 1st RHS} \n");
-    fprintf(stderr, "           K2 VECTORS of size L2   {vectors in 2nd RHS} \n");
-    fprintf(stderr, "           ... \n");
-    fprintf(stderr, "           Km VECTORS of size Lm   {vectors in m-th RHS} \n");
-    fprintf(stderr, "        example VECTOR = [0 1 0 1 1 0] (size 6)\n\n");
+    fprintf(HELP_FILE, "FILE = file containing MRHS system \n      (if none, system is randomly generated using SEED)\n");
+    fprintf(HELP_FILE, "OUT  = file to write out generated MRHS system \n\n");
+    fprintf(HELP_FILE, "File format: METADATA {numbers N M L1 K1 .. Lm Km} \n");
+    fprintf(HELP_FILE, "           N  VECTORS of size M*SUM(Li) {rows of joint system matrix}\n");
+    fprintf(HELP_FILE, "           K1 VECTORS of size L1   {vectors in 1st RHS} \n");
+    fprintf(HELP_FILE, "           K2 VECTORS of size L2   {vectors in 2nd RHS} \n");
+    fprintf(HELP_FILE, "           ... \n");
+    fprintf(HELP_FILE, "           Km VECTORS of size Lm   {vectors in m-th RHS} \n");
+    fprintf(HELP_FILE, "        example VECTOR = [0 1 0 1 1 0] (size 6)\n\n");
 
     //fprintf(stderr, "[-e] = if enabled, SW only estimates complexity, does not solve the system\n\n");
 }
@@ -230,7 +236,7 @@ int prepare_system(MRHS_system *system, _experiment *setup)
         f = fopen(setup->in, "r");
         if (f == NULL)
         {
-           fprintf(stderr, "Invalid file name: %s\n", setup->in);
+           fprintf(HELP_FILE, "Invalid file name: %s\n", setup->in);
            return 0;
         }
 
@@ -269,10 +275,9 @@ int prepare_system(MRHS_system *system, _experiment *setup)
          fout = fopen(setup->out, "w");
          if (fout == NULL)
          {
-               fprintf(stderr, "Invalid file name: %s\n", setup->out);
+               fprintf(HELP_FILE, "Invalid file name: %s\n", setup->out);
                return 0;
          }
-         write_mrhs_variable(fout, *system);
          setup->fsols = fout;
     }
 
@@ -311,35 +316,50 @@ int main(int argc, char* argv[])
     srand(experiment.seed2);
 
 #if (_VERBOSITY > 0)
-    printf("Experimental setup, SEED = %08x, SEED2 = %08x \n", experiment.seed, experiment.seed2);
+    fprintf(REPORT_FILE, "Experimental setup, SEED = %08x, SEED2 = %08x \n", experiment.seed, experiment.seed2);
     if (experiment.in != NULL)
-        printf("Input file: %s\n", experiment.in);
-    printf("Num variables n = %i \n", experiment.n);
-    printf("Num equations m = %i \n", experiment.m);
-    printf("Block length  l = %i \n", experiment.l);
-    printf("Block size    k = %i \n", experiment.k);
-    if (experiment.out != NULL)
-        printf("System stored to: %s\n", experiment.out);
+        fprintf(REPORT_FILE, "Input file: %s\n", experiment.in);
+    fprintf(REPORT_FILE, "Num variables n = %i \n", experiment.n);
+    fprintf(REPORT_FILE, "Num equations m = %i \n", experiment.m);
+    fprintf(REPORT_FILE, "Block length  l = %i \n", experiment.l);
+    fprintf(REPORT_FILE, "Block size    k = %i \n", experiment.k);
 #endif
 
 #if (_VERBOSITY > 2)
-    printf("\nInitial MRHS system: \n");
-    print_mrhs(stdout, system);
-    printf("\n");
+    fprintf(REPORT_FILE, "\nInitial MRHS system: \n");
+    print_mrhs(REPORT_FILE, system);
+    fprintf(REPORT_FILE, "\n");
 #endif
 
     if (experiment.compress)
     {
         //make linear equation substitutions
-        remove_linear(&system);
-        remove_empty(&system);
     #if (_VERBOSITY > 2)
-        printf("\nCompressed MRHS system: \n");
-        print_mrhs(stdout, system);
-        printf("\n");
+        int subst =
+    #endif
+            remove_linear(&system);
+    #if (_VERBOSITY > 2)
+        int removed =
+    #endif
+            remove_empty(&system);
+    #if (_VERBOSITY > 2)
+        fprintf(REPORT_FILE, "\nLinear substitutions: %d\n", subst);
+        fprintf(REPORT_FILE, "Empty blocks: %d\n", removed);
+        fprintf(REPORT_FILE, "\nCompressed MRHS system: \n");
+        print_mrhs(REPORT_FILE, system);
+        fprintf(REPORT_FILE, "\n");
     #endif
     }
 
+    //report system ?
+    if (experiment.fsols != NULL)
+    {
+         write_mrhs_variable(experiment.fsols, system);
+#if (_VERBOSITY > 0)
+        if (experiment.out != NULL)
+            fprintf(REPORT_FILE, "System stored to: %s\n", experiment.out);
+#endif
+    }
 
 	// run the experiment
 
@@ -379,13 +399,13 @@ int main(int argc, char* argv[])
 		for (int i = 0; i < stats.count; i++)
 		{
 #if (_VERBOSITY > 1)
-			fprintf(stdout, "\nSolution %i: ", i+1);
-			print_bv(&results[i], stdout);
+			fprintf(REPORT_FILE, "\nSolution %i: ", i+1);
+			print_bv(&results[i], REPORT_FILE);
 #endif
 			clear_bv(&results[i]);
 		}
 #if (_VERBOSITY > 1)
-		fprintf(stdout, "\n");
+		fprintf(REPORT_FILE, "\n");
 #endif
 
 		free(results);
@@ -396,22 +416,22 @@ int main(int argc, char* argv[])
 	// post processing, report statistics
 
 #if (_VERBOSITY > 0)
-    printf("\nXORs: %lld Expected: %.0lf - %.0lf\n",
+    fprintf(REPORT_FILE, "\nXORs: %lld Expected: %.0lf - %.0lf\n",
                stats.xors, stats.xor2, stats.xor1);
-    printf("\nSolutions: %lld\nSearched %lld in %.3lf s, %e per sec\n",
+    fprintf(REPORT_FILE, "\nSolutions: %lld\nSearched %lld in %.3lf s, %e per sec\n",
                stats.count, stats.total, stats.t, stats.total/stats.t);
 #endif
 
 #if (_VERBOSITY == 0)
 
     //     SEED/SEED2   n   m   l  k rank count total time expected
-    printf("%08x/%08x\t%i\t%i\t%i\t%i\t",
+    fprintf(RESULTS_FILE, "%08x/%08x\t%i\t%i\t%i\t%i\t",
 		experiment.seed,experiment.seed2,experiment.n, experiment.m, experiment.l, experiment.k);
-    printf("%i\t",
+    fprintf(RESULTS_FILE, "%i\t",
 		stats.rank);
-    printf("%lld\t%lld\t%lf\t%.0lf\t",
+    fprintf(RESULTS_FILE, "%lld\t%lld\t%lf\t%.0lf\t",
                stats.count, stats.total, stats.t, stats.expected);
-    printf("%lld\t%.0lf\t%.0lf\n",
+    fprintf(RESULTS_FILE, "%lld\t%.0lf\t%.0lf\n",
                stats.xors, stats.xor2, stats.xor1);
 #endif
 
