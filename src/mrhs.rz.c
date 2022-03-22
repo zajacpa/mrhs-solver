@@ -108,8 +108,9 @@ long long int solve_rz(MRHS_system *system, _bv **pResults, int maxt, long long 
 
 #if (_VERBOSITY > 1)
     int rank =
-                echelonize(pbbm, prhs, &pA);
 #endif
+                echelonize(pbbm, prhs, &pA);
+
     GlobalA = pA;
 #if (_VERBOSITY > 1)
 	fprintf(stdout, "Starting RZ solver, system rank = %i\n", rank);
