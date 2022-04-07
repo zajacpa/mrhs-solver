@@ -368,10 +368,10 @@ int main(int argc, char* argv[])
     switch (experiment.solver)
     {
 	case HC_SOLVER_TYPE:
-        stats.count = solve_hc(&system, &results, start+experiment.maxt*CLOCKS_PER_SEC, &stats.xors, &stats.total);
+        stats.count = solve_hc(&system, &results, experiment.maxt, &stats.xors, &stats.total);
         break;
 	case RZ_SOLVER_TYPE:
-        stats.count = solve_rz(&system, &results, start+experiment.maxt*CLOCKS_PER_SEC, &stats.xors, &stats.total);
+        stats.count = solve_rz(&system, &results, experiment.maxt, &stats.xors, &stats.total);
         break;
     }
 	end = clock();

@@ -213,7 +213,8 @@ long long int solve_hc(MRHS_system *system, _bv **pResults, int maxt, long long 
 	_block *rhs  =(_block*) malloc(cmrhs->nblocks * sizeof(_block));
 	_block *tmp  =(_block*) malloc(cmrhs->nblocks * sizeof(_block));
 
-	for (restart = 0; clock() < maxt; restart++)
+	time_t start = time(0);
+	for (restart = 0; start + maxt >= time(0); restart++)
 	{
 		//initialize random solution
 		memset(rhs, 0, cmrhs->nblocks * sizeof(_block));
@@ -273,9 +274,9 @@ long long int solve_hc(MRHS_system *system, _bv **pResults, int maxt, long long 
 
 	if (bestdiff == 0)
 	{
-	#if (_VERBOSITY > 1)
+#if (_VERBOSITY > 1)
 		fprintf(stdout, "Solution found in %i restarts\n", restart);
-	#endif
+#endif
 
 		*pResults  = (_bv*) malloc(sizeof(_bv));
 		**pResults = create_bv(nrows);

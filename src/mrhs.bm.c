@@ -85,32 +85,40 @@ void random_bm(_bm *pbm)
 /// PRE:
 void random_unique_bm(_bm *pbm)
 {
-	int filled, row;
-	_block mask = BLOCK_MASK(pbm->ncols), value, tmp;
+    int filled, row;
+    _block mask = BLOCK_MASK(pbm->ncols), value, tmp;
 
-	for (filled = 0; filled < pbm->nrows; filled++)
-	{
-		//generate value, and insert sort it
-		value = random_block() & mask;
-		for (row = 0; row < filled; row++)
-		{
-			//should value be inserted here?
-			if (pbm->rows[row] > value)
-			{
-				//if yes, shift others up
-				tmp            = pbm->rows[row];
-				pbm->rows[row] = value;
-				value          = tmp;
-			}
-			//duplicate?
-			else if (pbm->rows[row] == value)
-			{
-				//add one to value, continue with insert
-				value++;
-			}
-		}
-		pbm->rows[filled] = value;
-	}
+    for (filled = 0; filled < pbm->nrows; filled++)
+    {
+        //generate value, and insert sort it
+        value = random_block() & mask;
+        for (row = 0; row < filled; row++)
+        {
+            //should value be inserted here?
+            if (pbm->rows[row] > value)
+            {
+                //if yes, shift others up
+                tmp            = pbm->rows[row];
+                pbm->rows[row] = value;
+                value          = tmp;
+            }
+            //duplicate?
+            else if (pbm->rows[row] == value)
+            {
+                //add one to value, continue with insert (cyclic: 111->000)
+                if (value == mask)
+                {
+                    value = 0;
+                    row = -1;
+                }
+                else
+                {
+                    value++;
+                }
+            }
+        }
+        pbm->rows[filled] = value;
+    }
 }
 
 ///fill in with random values,
