@@ -122,7 +122,7 @@ int parse_cmd(int argc, char *argv[], _experiment *setup);
 
 void help(char* fn)
 {
-    fprintf(HELP_FILE, "\nUsage: %s [-n N] [-m M] [-l L] [-k K] [-s SEED] [-S SED2] [-f FILE] [-o OUT] [-e TYPE] [-t MAXT]\n", fn);
+    fprintf(HELP_FILE, "\nUsage: %s [-n N] [-m M] [-l L] [-k K] [-s SEED] [-S SED2] [-f FILE] [-o OUT] [-c] [-e TYPE] [-t MAXT]\n", fn);
     fprintf(HELP_FILE, "   N = number of variables (def. 10)\n");
     fprintf(HELP_FILE, "   M = number of MRHS eqs  (def. 10)\n");
     fprintf(HELP_FILE, "   L = dimension of RHSs   (def. 3)\n");
@@ -131,7 +131,8 @@ void help(char* fn)
     fprintf(HELP_FILE, "SEED = randomness seed for MRHS system\n");
     fprintf(HELP_FILE, "SED2 = randomness seed for computation\n\n");
 
-    fprintf(HELP_FILE, "TYPE = solver type: 0=no solver, %d=Raddum-Zajac, %d=HC\n\n", RZ_SOLVER_TYPE, HC_SOLVER_TYPE);
+    fprintf(HELP_FILE, "TYPE = solver type: 0=no solver, %d=Raddum-Zajac, %d=HC\n", RZ_SOLVER_TYPE, HC_SOLVER_TYPE);
+    fprintf(HELP_FILE, "NOTE: -c enables system compression (for HC) \n\n");
 
     fprintf(HELP_FILE, "FILE = file containing MRHS system \n      (if none, system is randomly generated using SEED)\n");
     fprintf(HELP_FILE, "OUT  = file to write out generated MRHS system \n\n");
