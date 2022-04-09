@@ -183,7 +183,7 @@ int write_mrhs_variable(FILE *f, MRHS_system system)
 	sum += fprintf(f, "%i %i\n", nrows, system.nblocks);
 	for (block = 0; block < system.nblocks; block++)
 	{
-		sum += fprintf(f, "%i %i\n", system.pS[block].nrows, system.pS[block].ncols);
+		sum += fprintf(f, "%i %i\n", system.pS[block].ncols, system.pS[block].nrows);
 	}
 
 	//print matrix
