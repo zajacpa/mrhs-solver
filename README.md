@@ -2,6 +2,11 @@
 
 Implementation of the modular command line MRHS solver (RZ solver + HC solver currently). 
 
+make
+bin/mrhs -h
+
+Read code for more info.
+
 Non-commercial use only.
 
 If you use this code, cite the following articles:
