@@ -44,7 +44,7 @@ void clear_bv(_bv* pbv)
     pbv->ncols   = 0;
 }
 
-_block get_bit_bv(_bv *bv, int col)
+_block get_bit_bv(const _bv *bv, int col)
 {
 	return (bv->row[col / MAXBLOCKSIZE] >> (col % MAXBLOCKSIZE)) & ONE;
 }
@@ -174,4 +174,24 @@ void print_bv(_bv *bv, FILE* f)
 	}
 	for (int bit = 0; bit < LASTBLOCKSIZE(bv->ncols); bit++)
 		fprintf(f, "%01x", (unsigned int) ((bv->row[block] >> bit)&ONE));
+}
+
+///print bit vector to file
+void random_bv(_bv *bv)
+{
+	int block = 0;
+	_block bits;
+	for (block = 0; block < bv->nblocks-1; block++)
+	{
+		bits = (rand() & 0xffffull) ^
+                         ((rand() & 0xffffull) << 16) ^
+                         ((rand() & 0xffffull) << 32) ^
+                         ((rand() & 0xffffull) << 48);
+        bv->row[block] = bits;
+	}
+    bits = (rand() & 0xffffull) ^
+                         ((rand() & 0xffffull) << 16) ^
+                         ((rand() & 0xffffull) << 32) ^
+                         ((rand() & 0xffffull) << 48);
+    bv->row[block] = bits & BLOCK_MASK(LASTBLOCKSIZE(bv->ncols));
 }

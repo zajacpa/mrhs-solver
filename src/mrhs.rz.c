@@ -82,6 +82,11 @@ long long int solve_rz(MRHS_system *system, _bv **pResults, int maxt, long long 
 
     _bbm *pbbm, **prhs, *pA = NULL;
 
+    if (system->nblocks == 0)
+    {
+        return 0;
+    }
+
 	//TODO: pbbm and prhs from system...
 	int blocksizes[system->nblocks];
 	for (int block = 0; block < system->nblocks; block++)

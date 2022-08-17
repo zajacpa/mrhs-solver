@@ -109,6 +109,7 @@ typedef struct {
   double maxt; //time limit in seconds
   int solver;   //solver type
   int compress;  //enable compression of system
+  int randsol;   //enforce at least one random solution
 
   char *in;    // system  input file
   char *out;   // system output file
@@ -122,14 +123,16 @@ int parse_cmd(int argc, char *argv[], _experiment *setup);
 
 void help(char* fn)
 {
-    fprintf(HELP_FILE, "\nUsage: %s [-n N] [-m M] [-l L] [-k K] [-s SEED] [-S SED2] [-f FILE] [-o OUT] [-c] [-e TYPE] [-t MAXT]\n", fn);
+    fprintf(HELP_FILE, "\nUsage: %s [-n N] [-m M] [-l L] [-k K] [-s SEED] [-S SED2] [-f FILE] [-o OUT] [-c] [-r] [-e TYPE] [-t MAXT] [-d DENS]\n", fn);
     fprintf(HELP_FILE, "   N = number of variables (def. 10)\n");
     fprintf(HELP_FILE, "   M = number of MRHS eqs  (def. 10)\n");
     fprintf(HELP_FILE, "   L = dimension of RHSs   (def. 3)\n");
     fprintf(HELP_FILE, "   K = num. vectors in RHS (def. 4)\n\n");
     fprintf(HELP_FILE, "MAXT = time limit (in seconds)\n");
+    fprintf(HELP_FILE, "DENS = density (-1 - uniform random, otherwise expected extra max. number of 1s in M)\n");
     fprintf(HELP_FILE, "SEED = randomness seed for MRHS system\n");
     fprintf(HELP_FILE, "SED2 = randomness seed for computation\n\n");
+    fprintf(HELP_FILE, "NOTE: -r enables enforcement of a (random) solution for generated systems \n\n");
 
     fprintf(HELP_FILE, "TYPE = solver type: 0=no solver, %d=Raddum-Zajac, %d=HC\n", RZ_SOLVER_TYPE, HC_SOLVER_TYPE);
     fprintf(HELP_FILE, "NOTE: -c enables system compression (for HC) \n\n");
@@ -162,6 +165,7 @@ void set_default_experiment(_experiment *setup)
     setup->d     = -1;   //dense matrix
     setup->solver = RZ_SOLVER_TYPE;    //try to solve with RZ solver
     setup->compress = 0;  //no equation compression
+    setup->randsol  = 0;  //no enforced random solution
 
     setup->in    = NULL; //no input/output
     setup->out   = NULL;
@@ -175,7 +179,7 @@ int parse_cmd(int argc, char *argv[], _experiment *setup)
 
    set_default_experiment(setup);
 
-   while ((c = getopt (argc, argv, "ce:hk:l:m:n:s:S:f:o:t:d:")) != -1)
+   while ((c = getopt (argc, argv, "cre:hk:l:m:n:s:S:f:o:t:d:")) != -1)
       switch (c)
       {
       case 'k':
@@ -214,7 +218,10 @@ int parse_cmd(int argc, char *argv[], _experiment *setup)
       case 'c':
         setup->compress = 1;
         break;
-      case '?':
+      case 'r':
+        setup->randsol  = 1;
+        break;
+     case '?':
       case 'h':
         help(argv[0]);
         exit(1);
@@ -267,6 +274,12 @@ int prepare_system(MRHS_system *system, _experiment *setup)
         else
         {
         	fill_mrhs_random_sparse_extra(system, setup->d);
+        }
+
+        //do we require at least one random solution
+        if (setup->randsol == 1)
+		{
+        	ensure_random_solution(system);
         }
 	}
 
@@ -366,15 +379,18 @@ int main(int argc, char* argv[])
 
 	start = clock();
 	//xors -> count of eval, total -> number of restarts
-    switch (experiment.solver)
-    {
-	case HC_SOLVER_TYPE:
-        stats.count = solve_hc(&system, &results, experiment.maxt, &stats.xors, &stats.total);
-        break;
-	case RZ_SOLVER_TYPE:
-        stats.count = solve_rz(&system, &results, experiment.maxt, &stats.xors, &stats.total);
-        break;
-    }
+	//if (system.nblocks > 0) //solver cannot handle empty system...
+	{
+        switch (experiment.solver)
+        {
+        case HC_SOLVER_TYPE:
+            stats.count = solve_hc(&system, &results, experiment.maxt, &stats.xors, &stats.total);
+            break;
+        case RZ_SOLVER_TYPE:
+            stats.count = solve_rz(&system, &results, experiment.maxt, &stats.xors, &stats.total);
+            break;
+        }
+	}
 	end = clock();
 	stats.t= (end-start)/(double)CLOCKS_PER_SEC;
 

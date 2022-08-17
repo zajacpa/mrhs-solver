@@ -123,6 +123,7 @@ void random_unique_bm(_bm *pbm)
 
 ///fill in with random values,
 ///    single    one to each column, linearly independent
+/// for correct lin independence PRE: pbm->nrows >> pbm->ncols
 void random_sparse_cols_bm(_bm *pbm)
 {
 	int row, col;
@@ -133,7 +134,8 @@ void random_sparse_cols_bm(_bm *pbm)
 		mask = (ONE<<col);
 
 		row = rand() % pbm->nrows;
-		if (pbm->rows[row] != ZERO)
+		//after && -> failsafe for system with low number of unknowns
+		if (pbm->rows[row] != ZERO && pbm->ncols < pbm->nrows)
 		{
 			//already set to another one
 			col--;
@@ -278,3 +280,51 @@ void add_constant_bm(_bm* pbm, _block c, int col)
             pbm->rows[row] ^= (ONE<<col);
     }
 }
+
+//vector times matrix equals vector:
+//PRE: correct dimensions of bit vector / matrix
+_block multiply_bv_x_bm(const _bv* pbv, const _bm* pbm)
+{
+    _block out = ZERO;
+    for (int row = 0; row < pbm->nrows; row++)
+    {
+        if (get_bit_bv(pbv, row) == ONE)
+            out ^= pbm->rows[row];
+    }
+    return out;
+}
+
+//unsorted search of x in block
+int index_of_block_in_bm(const _bm* pbm, _block x)
+{
+    x &= BLOCK_MASK(pbm->ncols);
+    for (int row = 0; row < pbm->nrows; row++)
+    {
+        if (x == pbm->rows[row])
+            return row;
+    }
+    return -1;
+}
+
+//check whether x is in bm, if it is not, replace nearest (lower valued) block
+_block ensure_block_in_bm(_bm* pbm, _block x)
+{
+    int pos = 0;
+    x &= BLOCK_MASK(pbm->ncols);
+    for (int row = 0; row < pbm->nrows; row++)
+    {
+        if (x == pbm->rows[row])
+        {
+            pos = row;
+            break;
+        }
+        if (x > pbm->rows[row])
+        {
+            pos = row;
+        }
+    }
+    _block out = pbm->rows[pos];
+    pbm->rows[pos] = x;
+    return out;
+}
+

@@ -54,16 +54,18 @@ MRHS_system create_mrhs_variable(int nrows, int nblocks, int blocksizes[], int r
 /// release memory allocated for MRHS system
 void clear_MRHS(MRHS_system *psystem)
 {
-	if (psystem->nblocks == 0)	//ASSERT ...
-		return;
+	//if (psystem->nblocks == 0)	//ASSERT ...
+	//	return;
 
 	for (int block = 0; block < psystem->nblocks; block++)
 	{
 		clear_bm(&psystem->pM[block]);
 		clear_bm(&psystem->pS[block]);
 	}
-	free(psystem->pM);
-	free(psystem->pS);
+	if (psystem->pM != NULL)
+        free(psystem->pM);
+	if (psystem->pS != NULL)
+        free(psystem->pS);
 
 	psystem->nblocks = 0;
 	psystem->pM      = NULL;
@@ -107,6 +109,26 @@ void fill_mrhs_random_sparse_extra(MRHS_system *psystem, int density)
 	}
 }
 
+/// Change RHS to ensure system has at least one random solution
+void ensure_random_solution(MRHS_system *psystem)
+{
+    if (psystem->nblocks < 1)
+        return;
+
+    _bv sol = create_bv(psystem->pM[0].nrows);
+    random_bv(&sol);
+
+    for (int block = 0; block < psystem->nblocks; block++)
+    {
+        //multiply block by sol
+        _block rhs = multiply_bv_x_bm(&sol, &psystem->pM[block]);
+
+        //replace rhs if needed
+        ensure_block_in_bm(&psystem->pS[block], rhs);
+    }
+
+}
+
 /// I/O
 
 /// deserialize system
@@ -114,27 +136,29 @@ MRHS_system read_mrhs_variable(FILE *f)
 {
 	MRHS_system system;
 	char c;
-	int row, block, n, m;
-	int *k, *l;
+	int row, block, n = 0, m = 0;
+	int *k = NULL, *l = NULL;
 
 	//read header
-	fscanf(f, "%i", &n);
-	fscanf(f, "%i", &m);
-
-	k = (int*)calloc(m, sizeof(int));
-	l = (int*)calloc(m, sizeof(int));
-	for (block = 0; block < m; block++)
+	if ( fscanf(f, "%i", &n) > 0 && fscanf(f, "%i", &m) > 0 )
 	{
-	 fscanf(f, "%i", &l[block]);
-	 fscanf(f, "%i", &k[block]);
+        k = (int*)calloc(m, sizeof(int));
+        l = (int*)calloc(m, sizeof(int));
+        for (block = 0; block < m; block++)
+        {
+         //TODO: check sizes
+         fscanf(f, "%i", &l[block]);
+         fscanf(f, "%i", &k[block]);
+        }
 	}
+
 
 	//prepare system
 	system = create_mrhs_variable(n, m, l, k);
 
 	//no longer needed
-    free(l);
-    free(k);
+	if (l != NULL) free(l);
+    if (k != NULL) free(k);
 
 	//read rows of M
 	for (row = 0; row < n; row++)

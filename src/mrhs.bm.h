@@ -112,4 +112,8 @@ _bv get_column_bm(_bm* pbm, int col);
 void add_column_bm(_bm* pbm, _bv *column, int col);
 void add_constant_bm(_bm* pbm, _block c, int col);
 
+_block multiply_bv_x_bm(const _bv* pbv, const _bm* pbm);
+int index_of_block_in_bm(const _bm* pbm, _block x);
+_block ensure_block_in_bm(_bm* pbm, _block x);
+
 #endif //_MRHS_BBM_H

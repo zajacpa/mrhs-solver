@@ -35,6 +35,7 @@ void clear_MRHS(MRHS_system *system);
 void fill_mrhs_random(MRHS_system *psystem);
 void fill_mrhs_random_sparse(MRHS_system *psystem);
 void fill_mrhs_random_sparse_extra(MRHS_system *psystem, int density);
+void ensure_random_solution(MRHS_system *psystem);
 
 /// I/O
 

@@ -27,6 +27,9 @@ _bv create_bv(int ncols);
 ///free space allocated to internal _bbm structures
 void clear_bv(_bv* pbv);
 
+///random bit vector
+void random_bv(_bv* pbv);
+
 
 _block is_non_zero_bv(_bv *bv);
 
@@ -37,7 +40,7 @@ void xor_bv(_bv *bv1, _bv *bv2);
 void inv_bv(_bv *bv1);
 
 
-_block get_bit_bv(_bv *bv, int col);
+_block get_bit_bv(const _bv *bv, int col);
 void set_one_bv(_bv *bv, int col);
 void set_zero_bv(_bv *bv, int col);
 void set_bit_bv(_bv *bv, int col, _block bit);
