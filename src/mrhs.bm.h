@@ -75,6 +75,16 @@ void random_unique_bm(_bm *pbm);
 ///    single    one to each column, linearly independent
 void random_sparse_cols_bm(_bm *pbm);
 
+
+///fill in pbm based on AND gate + random constant
+/// PRE: nrows = 4, ncols = 3
+void random_and_bm(_bm *pbm);
+
+///fill in with random values for AND inputs, and single one for AND output,
+/// PRE: ncols = 3, output_row < nrows
+void random_and_cols_bm(_bm *pbm, int output_row);
+
+
 /// --------------------------------------------------------------------
 /// I/O
 

@@ -110,6 +110,7 @@ typedef struct {
   int solver;   //solver type
   int compress;  //enable compression of system
   int randsol;   //enforce at least one random solution
+  int andsys;   //special system based on PRNG
 
   char *in;    // system  input file
   char *out;   // system output file
@@ -123,11 +124,12 @@ int parse_cmd(int argc, char *argv[], _experiment *setup);
 
 void help(char* fn)
 {
-    fprintf(HELP_FILE, "\nUsage: %s [-n N] [-m M] [-l L] [-k K] [-s SEED] [-S SED2] [-f FILE] [-o OUT] [-c] [-r] [-e TYPE] [-t MAXT] [-d DENS]\n", fn);
+    fprintf(HELP_FILE, "\nUsage: %s [-P] [-n N] [-m M] [-l L] [-k K] [-s SEED] [-S SED2] [-f FILE] [-o OUT] [-c] [-r] [-e TYPE] [-t MAXT] [-d DENS]\n", fn);
     fprintf(HELP_FILE, "   N = number of variables (def. 10)\n");
     fprintf(HELP_FILE, "   M = number of MRHS eqs  (def. 10)\n");
     fprintf(HELP_FILE, "   L = dimension of RHSs   (def. 3)\n");
     fprintf(HELP_FILE, "   K = num. vectors in RHS (def. 4)\n\n");
+    fprintf(HELP_FILE, "NOTE: -P enables special PRNG based equations: override meaning of N,M,K,L, ignored -r,-d \n\n");
     fprintf(HELP_FILE, "MAXT = time limit (in seconds)\n");
     fprintf(HELP_FILE, "DENS = density (-1 - uniform random, otherwise expected extra max. number of 1s in M)\n");
     fprintf(HELP_FILE, "SEED = randomness seed for MRHS system\n");
@@ -166,6 +168,7 @@ void set_default_experiment(_experiment *setup)
     setup->solver = RZ_SOLVER_TYPE;    //try to solve with RZ solver
     setup->compress = 0;  //no equation compression
     setup->randsol  = 0;  //no enforced random solution
+    setup->andsys   = 0;  //not special PRNG system
 
     setup->in    = NULL; //no input/output
     setup->out   = NULL;
@@ -179,7 +182,7 @@ int parse_cmd(int argc, char *argv[], _experiment *setup)
 
    set_default_experiment(setup);
 
-   while ((c = getopt (argc, argv, "cre:hk:l:m:n:s:S:f:o:t:d:")) != -1)
+   while ((c = getopt (argc, argv, "Pcre:hk:l:m:n:s:S:f:o:t:d:")) != -1)
       switch (c)
       {
       case 'k':
@@ -220,6 +223,9 @@ int parse_cmd(int argc, char *argv[], _experiment *setup)
         break;
       case 'r':
         setup->randsol  = 1;
+        break;
+      case 'P':
+        setup->andsys  = 1;
         break;
      case '?':
       case 'h':
@@ -264,10 +270,24 @@ int prepare_system(MRHS_system *system, _experiment *setup)
 		srand(setup->seed);
 
 		//empty system:
-        *system = create_mrhs_fixed(setup->n, setup->m, setup->l, setup->k);
+        if (setup->andsys == 1)
+        {
+            *system = create_mrhs_fixed(setup->m+setup->k-setup->l, setup->m, 3, 4);
+        }
+        else
+        {
+            *system = create_mrhs_fixed(setup->n, setup->m, setup->l, setup->k);
+        }
 
 		//dense or sparse?
-		if (setup->d == -1)
+        if (setup->andsys == 1)
+        {
+            fill_mrhs_and(system, setup->k, setup->l);
+            
+            setup->n = setup->m + setup->k - setup->l;
+            setup->l = 3; setup->k = 4;
+        }
+		else if (setup->d == -1)
 		{
         	fill_mrhs_random(system);
         }

@@ -121,6 +121,42 @@ void random_unique_bm(_bm *pbm)
     }
 }
 
+///fill in pbm based on AND gate + random constant
+/// PRE: nrows = 4, ncols = 3
+void random_and_bm(_bm *pbm)
+{
+    if (pbm->nrows != 4 || pbm->ncols != 3)
+        return;
+
+    _block constant = random_block() & BLOCK_MASK(pbm->ncols); 
+
+    pbm->rows[0] = 0x0 ^ constant;  //000 + c
+    pbm->rows[1] = 0x1 ^ constant;  //001 + c
+    pbm->rows[2] = 0x2 ^ constant;  //010 + c
+    pbm->rows[3] = 0x7 ^ constant;  //111 + c
+}
+
+///fill in with random values for AND inputs, and single one for AND output,
+/// PRE: ncols = 3, output_row < nrows
+void random_and_cols_bm(_bm *pbm, int output_row)
+{
+    if (pbm->nrows < output_row || output_row < 0 || pbm->ncols != 3)
+        return;
+
+    //random value in first 2 columns
+    _block mask = BLOCK_MASK(pbm->ncols-1);
+    int row;
+
+	for (row = 0; row < output_row; row++)
+	{
+		pbm->rows[row] = random_block() & mask;
+	}
+
+    //special output_row
+    pbm->rows[output_row] = (ONE << 2);
+    
+}
+
 ///fill in with random values,
 ///    single    one to each column, linearly independent
 /// for correct lin independence PRE: pbm->nrows >> pbm->ncols
