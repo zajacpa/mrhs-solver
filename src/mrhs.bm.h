@@ -84,6 +84,10 @@ void random_and_bm(_bm *pbm);
 /// PRE: ncols = 3, output_row < nrows
 void random_and_cols_bm(_bm *pbm, int output_row);
 
+///fill in with random sparse values for AND inputs (pc+key), and single one for AND output,
+/// PRE: ncols = 3
+void random_sparse_and_cols_bm(_bm *pbm, int output_row, int density);
+
 
 /// --------------------------------------------------------------------
 /// I/O

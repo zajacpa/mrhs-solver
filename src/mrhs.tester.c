@@ -282,7 +282,10 @@ int prepare_system(MRHS_system *system, _experiment *setup)
 		//dense or sparse?
         if (setup->andsys == 1)
         {
-            fill_mrhs_and(system, setup->k, setup->l);
+            if (setup->d < 0)
+                fill_mrhs_and(system, setup->k, setup->l);
+            else
+                fill_mrhs_and_sparse(system, setup->k, setup->l, setup->d);
             
             setup->n = setup->m + setup->k - setup->l;
             setup->l = 3; setup->k = 4;

@@ -123,6 +123,30 @@ void fill_mrhs_and(MRHS_system *psystem, int k, int l)
 	}
 }
 
+/// Fill MRHS system with "AND" PRNG data,
+///   block structure, AND gates + constants, sparse version
+///     m -> number of blocks (system->nblocks)
+///     IN: k -> key variables
+///     IN: l -> filter variables
+///    first m - l equations are AND blocks with output variables
+///    last l equations are filters
+///   PRE: ncols in each block == 3, rhs in each block == 4
+///   PRE: 0 <= l <= nblocks
+///   PRE: nrows == k+m-l 
+void fill_mrhs_and_sparse(MRHS_system *psystem, int k, int l, int density)
+{
+    int m = psystem->nblocks;
+    if (l > m || l < 0 || k + m - l != psystem->pM->nrows)
+        return;
+    
+	for (int block = 0; block < psystem->nblocks; block++)
+	{
+		random_sparse_and_cols_bm(&psystem->pM[block], k+block, density);
+		random_and_bm(&psystem->pS[block]);
+	}
+}
+
+
 /// Fill MRHS system with random data
 ///  M is sparse -> one 1 in each column + density number of ones
 void fill_mrhs_random_sparse_extra(MRHS_system *psystem, int density)

@@ -157,6 +157,40 @@ void random_and_cols_bm(_bm *pbm, int output_row)
     
 }
 
+///fill in with random values for AND inputs, and single one for AND output,
+/// PRE: ncols = 3, output_row < nrows
+void random_sparse_and_cols_bm(_bm *pbm, int output_row, int density)
+{
+    int special = 0, row, col;
+    _block mask;
+    
+    if (output_row < 0 || pbm->ncols != 3)
+        return;
+    
+    if (output_row < pbm->nrows)
+    {
+        //special output_row / column
+        pbm->rows[output_row] = (ONE << 2);
+        special = 1;
+    }
+    else
+    {
+        output_row = pbm->nrows;
+    }
+    
+	for (col = 0; col < pbm->ncols - special; col++)
+	{
+		mask = (ONE<<col);
+
+        //set active variable 1
+        for (int i = 0; i <= density; i++)
+        {
+            row = rand() % output_row;        
+            pbm->rows[row] |= mask;
+        }
+	}    
+}
+
 ///fill in with random values,
 ///    single    one to each column, linearly independent
 /// for correct lin independence PRE: pbm->nrows >> pbm->ncols
