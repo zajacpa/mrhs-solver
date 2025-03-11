@@ -21,3 +21,10 @@ https://konferencia.unideb.hu/sites/default/files/upload_documents/10_5486_pmd.2
 
 General MRHS cryptanalysis:
 Zajac, P. Algebraic Cryptanalysis with MRHS Equations. Cryptography 2023, 7, 19. https://doi.org/10.3390/cryptography7020019
+
+# Example MRHS equations
+
+db1.zip - random sparse MRHS equations of dimension 48
+db2.zip - random sparse MRHS equations of dimensions 42-54
+db3.zip - random dense MRHS equations, plus random MRHS equations with 2 or 3 ones on average
+db100.zip - random sparse MRHS eqautions of dimension 100
